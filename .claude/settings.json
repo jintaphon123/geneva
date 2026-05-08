@@ -1,0 +1,16 @@
+{
+  "permissions": {},
+  "hooks": {
+    "Stop": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "echo '⚠️  SESSION END — MANDATORY BEFORE STOPPING:\\n1. Write session summary → templates/session-summary.md (date, what we worked on, decisions, open items)\\n2. Update decisions/log.md — log any decisions made this session\\n3. Update any context/ files if Bond shared new info about himself, his business, or priorities\\nDo NOT stop until all three are done.'"
+          }
+        ]
+      }
+    ]
+  }
+}
