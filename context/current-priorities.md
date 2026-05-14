@@ -2,7 +2,7 @@
 
 ## Top 3 (in order)
 
-1. **Second Brain MVP** — perfect cross-LLM memory architecture (.md + VS Code + Anti-Gravity)
+1. **Second Brain MVP** — Build agent harness (Clawd-Code base + 4 AI build approach) → Chat Mode UI → Memory layer (temporal schema + 5 tiers) → KU pilot
 2. **Senior Project Pitch** — structure concept, recruit KU team, lock in as official project
 3. **Academic Management** — pass 3rd-year ME coursework without derailing startup progress
 

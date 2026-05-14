@@ -3,12 +3,19 @@
 ## 1. Second Brain Startup — PRIMARY FOCUS
 
 - **Stage:** MVP (local prototype) → Senior Project pitch → commercial startup
-- **Core idea:** Platform-agnostic AI memory system using `.md` files + skill folders
-- **Key differentiator:** Context persists across LLMs (Claude, ChatGPT, etc.); knowledge compounds
-- **Stack:** VS Code, Anti-Gravity, Markdown
+- **Core idea:** ทุกคนมี AI ประจำตัวที่รู้จักเขาลึก จำทุก decision และฉลาดขึ้นเรื่อยๆ เมื่อใช้ร่วมกันในองค์กร AI ของแต่ละคนเชื่อมกัน — ส่งงานต่อ brief ทีม query ความรู้ข้ามกัน โดยอัตโนมัติ
+- **Core thesis:** ความรู้อยู่ในหัวคน ไม่ใช่ระบบ — นั่นคือสาเหตุที่องค์กรวนซ้ำทำผิดเรื่องเดิม Second Brain ดึง knowledge ออกจากหัวคนและทำให้มันสะสมและส่งต่อได้ไม่จำกัด
+- **Key differentiators:**
+  - AI Communication Bridge — AI ของคุณ brief ทีมแทนคุณ ไม่ต้องเขียน status update อีกต่อไป
+  - Knowledge Inheritance — พนักงานใหม่วันแรก = expert ด้วยความรู้สะสมของทุกคนก่อนหน้า
+  - AI Network — query + evaluate AI ของแต่ละคนพร้อมกัน (performance eval, succession planning, project staffing)
+  - Institutional Memory — เมื่อคนออก ความรู้ยังอยู่ในระบบ
+  - Model-Agnostic — `.md` files ทำงานกับทุก LLM
+- **Stack:** VS Code, Anti-Gravity, Markdown, NotebookLM, Gemini CLI sidecar
 - **Target user:** Non-tech-savvy people; ChatGPT-like UI that hides complex backend entirely
+- **Current orchestration:** Claude/Codex primary + Gemini CLI sidecar for second-opinion/research/challenge loops
 - **Milestone 3mo:** Working cross-LLM prototype + KU team formed + locked as Senior Project
-- **Milestone 1yr:** Commercial launch + web UI + using AI to run TW EV and full rental automation
+- **Milestone 1yr:** Commercial launch + web UI + AI Communication Layer + using AI to run TW EV and full rental automation
 
 ## 2. Impact Arena Condo — Active / Growing Role
 

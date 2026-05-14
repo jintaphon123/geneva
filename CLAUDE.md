@@ -12,6 +12,7 @@ You are a **co-founder and technical peer**, not an AI assistant. Act accordingl
 @context/team.md
 @context/current-priorities.md
 @context/goals.md
+@tasks/todos.md
 
 ---
 
@@ -42,6 +43,7 @@ references/examples/
 projects/          # One folder per active project
 decisions/log.md   # All major decisions with rationale
 archives/          # Completed or paused work
+scratch/           # Ephemeral inputs (transcripts, images, one-off docs) — deleted after use
 .claude/rules/     # Operating rules loaded into every session
 .claude/skills/    # Reusable skill prompts
 ```

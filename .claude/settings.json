@@ -1,13 +1,24 @@
 {
   "permissions": {},
   "hooks": {
+    "PreCompact": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "echo '{\"systemMessage\":\"⚡ Context กำลัง compact — Zero Amnesia triggered อัตโนมัติ\",\"hookSpecificOutput\":{\"hookEventName\":\"PreCompact\",\"additionalContext\":\"MANDATORY PRE-COMPACT: Context window is about to compact. Execute NOW before compaction: (1) Update any context/ files that changed this session, (2) Append all decisions made to decisions/log.md with date+rationale, (3) Update memory/ files (user/feedback/project) with new info Bond shared, (4) Write current session state to templates/session-summary.md. Apply Zero Amnesia Rule — nothing learned this session should be lost to compaction.\"}}'",
+            "statusMessage": "บันทึก context ก่อน compact..."
+          }
+        ]
+      }
+    ],
     "Stop": [
       {
         "matcher": "",
         "hooks": [
           {
             "type": "command",
-            "command": "echo '⚠️  SESSION END — MANDATORY BEFORE STOPPING:\\n1. Write session summary → templates/session-summary.md (date, what we worked on, decisions, open items)\\n2. Update decisions/log.md — log any decisions made this session\\n3. Update any context/ files if Bond shared new info about himself, his business, or priorities\\nDo NOT stop until all three are done.'"
+            "command": "echo '⚠️  SESSION END — รัน /wrapup เพื่อจัดการทุกอย่างอัตโนมัติ (memory + session-summary + decisions/log + NotebookLM AI Brain sync)\\n\\nถ้าไม่ได้รัน /wrapup ให้ทำด้วยตัวเอง:\\n1. Write session summary → templates/session-summary.md\\n2. Update decisions/log.md\\n3. Update context/ files ถ้า Bond แชร์ข้อมูลใหม่\\nDo NOT stop until done.' && SCRATCH=$(find scratch -mindepth 1 -not -name '.gitignore' 2>/dev/null | head -20) && if [ -n \"$SCRATCH\" ]; then echo \"📁 scratch/ ยังมีไฟล์ค้างอยู่: $SCRATCH → ถาม Bond: งานนี้เสร็จแล้วรึยัง? ถ้าใช่ให้รัน rm -f scratch/* แล้วแจ้ง Bond ว่าลบแล้ว\"; fi"
           }
         ]
       }
