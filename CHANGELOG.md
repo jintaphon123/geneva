@@ -60,4 +60,4 @@ Initial open source release of Geneva Layer 0.
 
 ---
 
-[0.1.0]: https://github.com/jintaphonteosuwan/geneva/releases/tag/v0.1.0
+[0.1.0]: https://github.com/jintaphon123/geneva/releases/tag/v0.1.0

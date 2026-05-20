@@ -38,7 +38,7 @@ Unlike cloud AI products:
 **Backend + CLI:**
 
 ```bash
-git clone https://github.com/jintaphonteosuwan/geneva
+git clone https://github.com/jintaphon123/geneva
 cd geneva
 pip install -e .
 geneva login       # set your API key

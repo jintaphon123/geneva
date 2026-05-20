@@ -10,7 +10,7 @@ readme = "README.md"
 license = {text = "MIT"}
 requires-python = ">=3.10"
 authors = [
-    {name = "Jintaphon Teosuwan", email = "jintaphonteosuwan@gmail.com"}
+    {name = "Jintaphon Teosuwan", email = "jintaphon123@gmail.com"}
 ]
 keywords = ["agent", "cli", "ai", "llm", "memory", "skills", "projects"]
 classifiers = [
@@ -49,9 +49,9 @@ dev = [
 geneva = "src.cli:main"
 
 [project.urls]
-Homepage = "https://github.com/jintaphonteosuwan/geneva"
-Repository = "https://github.com/jintaphonteosuwan/geneva"
-Documentation = "https://github.com/jintaphonteosuwan/geneva#readme"
+Homepage = "https://github.com/jintaphon123/geneva"
+Repository = "https://github.com/jintaphon123/geneva"
+Documentation = "https://github.com/jintaphon123/geneva#readme"
 
 [tool.setuptools.packages.find]
 where = ["."]

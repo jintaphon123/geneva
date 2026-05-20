@@ -19,7 +19,7 @@ Layer 1 (AI-to-AI collaboration protocol) is not yet open for external contribut
 ## Setup
 
 ```bash
-git clone https://github.com/jintaphonteosuwan/geneva
+git clone https://github.com/jintaphon123/geneva
 cd geneva
 pip install -e ".[dev]"
 pytest                  # must pass before submitting
