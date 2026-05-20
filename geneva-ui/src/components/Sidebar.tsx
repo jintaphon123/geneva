@@ -87,6 +87,7 @@ export function Sidebar({
   const [projectLimit, setProjectLimit] = useState(INITIAL_PROJECT_LIMIT)
   const [sessionLimit, setSessionLimit] = useState(INITIAL_SESSION_LIMIT)
   const [openMenuId, setOpenMenuId] = useState<string | null>(null)
+  const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null)
   const [hoveredSessionId, setHoveredSessionId] = useState<string | null>(null)
   const [renamingId, setRenamingId] = useState<string | null>(null)
   const [renameValue, setRenameValue] = useState("")
@@ -211,19 +212,21 @@ export function Sidebar({
                   <span>Add to project</span>
                 </button>
                 <div className="session-menu-divider" />
-                <button
-                  className="session-menu-item danger"
-                  onClick={() => {
-                    setOpenMenuId(null)
-                    if (window.confirm(`Delete "${title}"?`)) {
-                      onDeleteSession(session.session_id)
-                    }
-                  }}
-                  type="button"
-                >
-                  <Trash2 className="size-3.5" />
-                  <span>Delete</span>
-                </button>
+                {pendingDeleteId === session.session_id ? (
+                  <div className="session-menu-item session-delete-confirm">
+                    <button className="session-menu-item danger" onClick={() => { onDeleteSession(session.session_id); setOpenMenuId(null); setPendingDeleteId(null) }} type="button">Confirm delete</button>
+                    <button className="session-menu-item" onClick={() => setPendingDeleteId(null)} type="button">Cancel</button>
+                  </div>
+                ) : (
+                  <button
+                    className="session-menu-item danger"
+                    onClick={() => { setOpenMenuId(null); setPendingDeleteId(session.session_id) }}
+                    type="button"
+                  >
+                    <Trash2 className="size-3.5" />
+                    <span>Delete</span>
+                  </button>
+                )}
               </div>
             ) : null}
           </div>

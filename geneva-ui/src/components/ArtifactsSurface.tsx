@@ -60,6 +60,7 @@ export function ArtifactsSurface({
   const [detailLoading, setDetailLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [copied, setCopied] = useState(false)
+  const [confirmingDelete, setConfirmingDelete] = useState(false)
 
   const projectNames = useMemo(() => new Map(projects.map((project) => [project.id, project.name])), [projects])
 
@@ -149,8 +150,11 @@ export function ArtifactsSurface({
 
   async function handleDeleteArtifact() {
     if (!selectedArtifactId) return
-    const confirmed = window.confirm("Delete this artifact?")
-    if (!confirmed) return
+    if (!confirmingDelete) {
+      setConfirmingDelete(true)
+      return
+    }
+    setConfirmingDelete(false)
     await deleteArtifact(selectedArtifactId)
     setSelectedArtifactId(null)
     setSelectedDetail(null)
@@ -274,9 +278,16 @@ export function ArtifactsSurface({
                     <Copy className="size-4" />
                     {copied ? "Copied" : "Copy text"}
                   </Button>
-                  <Button aria-label="Delete artifact" onClick={() => void handleDeleteArtifact()} size="compactIcon" variant="quiet">
-                    <Trash2 className="size-4" />
-                  </Button>
+                  {confirmingDelete ? (
+                    <>
+                      <Button onClick={() => setConfirmingDelete(false)} size="compactIcon" variant="quiet">Cancel</Button>
+                      <Button aria-label="Confirm delete" onClick={() => void handleDeleteArtifact()} size="compactIcon" variant="quiet" style={{ color: "var(--destructive)" }}>Delete</Button>
+                    </>
+                  ) : (
+                    <Button aria-label="Delete artifact" onClick={() => void handleDeleteArtifact()} size="compactIcon" variant="quiet">
+                      <Trash2 className="size-4" />
+                    </Button>
+                  )}
                 </div>
               </div>
 

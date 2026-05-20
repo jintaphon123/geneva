@@ -87,7 +87,11 @@ export function ArtifactPanel({ artifact, onClose }: ArtifactPanelProps) {
                 title={visibleArtifact.title}
               />
             ) : language === "svg" ? (
-              <div className="artifact-svg-preview" dangerouslySetInnerHTML={{ __html: sanitizedSvg }} />
+              <img
+                alt={visibleArtifact.title || "SVG artifact"}
+                className="artifact-svg-preview"
+                src={`data:image/svg+xml;charset=utf-8,${encodeURIComponent(sanitizedSvg)}`}
+              />
             ) : (
               <pre className="artifact-code-block">
                 <code className={`language-${language}`}>{visibleArtifact.code}</code>
