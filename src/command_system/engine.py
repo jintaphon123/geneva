@@ -1,5 +1,5 @@
 """
-Command execution engine for Clawd Code.
+Command execution engine for Geneva.
 
 Handles execution of commands and integration with the REPL.
 """

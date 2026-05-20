@@ -1,16 +1,10 @@
-"""Python package placeholder for the archived `server` subsystem."""
+from .create_direct_connect_session import create_direct_connect_session
+from .direct_connect_manager import DirectConnectManager, get_default_manager
+from .types import DirectConnectSession
 
-from __future__ import annotations
-
-import json
-from pathlib import Path
-
-SNAPSHOT_PATH = Path(__file__).resolve().parent.parent / 'reference_data' / 'subsystems' / 'server.json'
-_SNAPSHOT = json.loads(SNAPSHOT_PATH.read_text())
-
-ARCHIVE_NAME = _SNAPSHOT['archive_name']
-MODULE_COUNT = _SNAPSHOT['module_count']
-SAMPLE_FILES = tuple(_SNAPSHOT['sample_files'])
-PORTING_NOTE = f"Python placeholder package for '{ARCHIVE_NAME}' with {MODULE_COUNT} archived module references."
-
-__all__ = ['ARCHIVE_NAME', 'MODULE_COUNT', 'PORTING_NOTE', 'SAMPLE_FILES']
+__all__ = [
+    "DirectConnectManager",
+    "DirectConnectSession",
+    "create_direct_connect_session",
+    "get_default_manager",
+]

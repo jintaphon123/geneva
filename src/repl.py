@@ -1,7 +1,7 @@
 """
-Clawd Codex - Interactive CLI
+Geneva - Interactive CLI
 
-A complete reimplementation of Claude Code with interactive terminal interface.
+Interactive terminal interface for the Geneva agent harness.
 """
 
 from __future__ import annotations
@@ -22,11 +22,12 @@ except ImportError:
     HAS_RICH = False
     Console = None  # type: ignore
 
-from .commands import get_commands, get_command
+from .commands import get_commands, get_command, lookup
 from .tools import get_tools, get_tool
 from .runtime import PortRuntime
 from .port_manifest import build_port_manifest
 from .query_engine import QueryEnginePort
+from .utils.asyncio_tools import run_awaitable_sync
 
 
 from .parity_audit import run_parity_audit
@@ -38,8 +39,8 @@ from .command_graph import build_command_graph
 from .tool_pool import assemble_tool_pool
 
 
-class ClawdCodexCLI:
-    """Interactive CLI for Clawd Codex."""
+class GenevaCLI:
+    """Interactive CLI for Geneva."""
 
     def __init__(self):
         self.manifest = build_port_manifest()
@@ -67,15 +68,15 @@ class ClawdCodexCLI:
         """Print welcome banner."""
         if HAS_RICH:
             self.console.print(Panel.fit(
-                "[bold cyan]Clawd Codex[/bold cyan]\n"
-                "[dim]A complete reimplementation of Claude Code[/dim]",
+                "[bold cyan]Geneva[/bold cyan]\n"
+                "[dim]Local agent harness for memory, tools, and skills[/dim]",
                 subtitle="Interactive Mode • Type 'help' for commands",
                 border_style="round",
             ))
         else:
             banner = f"""
 {self._colorize('╔═══════════════════════════════════════════════════════════╔', 'cyan')}
-{self._colorize('║', 'cyan')}   {self._colorize('Clawd Codex', 'bold')} - Claude Code Reimplementation   {self._colorize('║', 'cyan')}
+{self._colorize('║', 'cyan')}   {self._colorize('Geneva', 'bold')} - Local Agent Harness          {self._colorize('║', 'cyan')}
 {self._colorize('║', 'cyan')}   Type "help" for commands • Interactive Mode                  {self._colorize('║', 'cyan')}
 {self._colorize('╚═══════════════════════════════════════════════════════════╛', 'cyan')}
 """
@@ -129,6 +130,17 @@ class ClawdCodexCLI:
 
     def handle_command(self, user_input: str) -> bool:
         """Handle user command. Returns True to continue, False to exit."""
+        if user_input.startswith("/"):
+            parts = user_input[1:].split()
+            cmd_name = parts[0] if parts else ""
+            cmd_args = parts[1:] if len(parts) > 1 else []
+            cmd = lookup(cmd_name)
+            if cmd:
+                result = run_awaitable_sync(cmd.run(cmd_args))
+                if result:
+                    print(result)
+                return True
+
         parts = user_input.strip().split(maxsplit=1)
         if not parts:
             return True
@@ -243,7 +255,7 @@ class ClawdCodexCLI:
 
         while self.running:
             try:
-                user_input = input(f"{self._colorize('clawd>', 'cyan')} ").strip()
+                user_input = input(f"{self._colorize('geneva>', 'cyan')} ").strip()
                 if user_input:
                     self.running = self.handle_command(user_input)
             except (KeyboardInterrupt, EOFError):
@@ -253,7 +265,7 @@ class ClawdCodexCLI:
 
 def main():
     """Main entry point."""
-    cli = ClawdCodexCLI()
+    cli = GenevaCLI()
     cli.run()
 
 

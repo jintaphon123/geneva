@@ -1,0 +1,158 @@
+@import "./styles/foundation.css";
+@import "./styles/chat.css";
+@import "./styles/memory-rail.css";
+@import "./styles/composer-markdown.css";
+@import "./styles/open-source-permission.css";
+@import "./styles/skills.css";
+@import "./styles/settings.css";
+@import "./styles/project.css";
+@import "./styles/artifacts.css";
+@import "./styles/memory-browser.css";
+@import "./styles/responsive.css";
+
+.chat-canvas-with-artifact {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.chat-canvas-with-artifact > .chat-scroll,
+.chat-canvas-with-artifact > .empty-shell {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.artifact-panel {
+  width: 380px;
+  flex-shrink: 0;
+  border-left: 1px solid var(--border);
+  background: var(--background);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.artifact-panel-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 380px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border);
+}
+
+.artifact-panel-title {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  margin: 0;
+  color: var(--foreground);
+  font-family: var(--font-ui);
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.artifact-panel-body {
+  flex: 1;
+  min-width: 380px;
+  overflow: auto;
+  padding: 16px;
+}
+
+.artifact-lang-badge {
+  font-size: 11px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  background: var(--muted);
+  color: var(--muted-foreground);
+  padding: 2px 8px;
+  border-radius: 4px;
+}
+
+.artifact-panel-icon-button,
+.code-canvas-button {
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--border);
+  background: var(--card);
+  color: var(--muted-foreground);
+  transition:
+    background 140ms ease-out,
+    color 140ms ease-out,
+    border-color 140ms ease-out;
+}
+
+.artifact-panel-icon-button {
+  width: 30px;
+  height: 30px;
+  flex-shrink: 0;
+  border-radius: 8px;
+}
+
+.artifact-panel-icon-button:hover,
+.code-canvas-button:hover {
+  border-color: color-mix(in srgb, var(--border) 72%, var(--foreground));
+  background: var(--muted);
+  color: var(--foreground);
+}
+
+.artifact-html-frame,
+.artifact-code-block,
+.artifact-svg-preview {
+  width: 100%;
+  min-height: 100%;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--card);
+}
+
+.artifact-html-frame {
+  display: block;
+  height: 100%;
+  background: #fff;
+}
+
+.artifact-code-block {
+  margin: 0;
+  overflow: auto;
+  padding: 14px;
+  color: var(--foreground);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 12.5px;
+  line-height: 1.6;
+  white-space: pre;
+}
+
+.artifact-code-block code {
+  font: inherit;
+}
+
+.artifact-svg-preview {
+  display: grid;
+  min-height: 220px;
+  place-items: center;
+  overflow: auto;
+  padding: 14px;
+}
+
+.artifact-svg-preview svg {
+  max-width: 100%;
+  max-height: 100%;
+}
+
+.code-block-actions {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 6px;
+}
+
+.code-canvas-button {
+  width: 28px;
+  height: 28px;
+  flex-shrink: 0;
+  border-radius: 8px;
+}

@@ -157,8 +157,6 @@ class TestCompactConversation(unittest.TestCase):
             Message(role="user", content="What about the code? " * 50),
             Message(role="assistant", content="Here's the code... " * 50),
         ])
-        original_count = len(conv.messages)
-
         mock_provider = MagicMock()
         mock_provider.chat_async = AsyncMock(
             return_value=ChatResponse(
@@ -171,9 +169,7 @@ class TestCompactConversation(unittest.TestCase):
 
         result = asyncio.run(compact_conversation(conv, mock_provider, "claude-sonnet-4-6"))
 
-        # Boundary and summary are added (2 new messages)
         self.assertEqual(len(conv.messages), result.post_compact_count)
-        self.assertLess(len(conv.messages), original_count)
 
         # Check that internal boundary is present
         boundary = next(
@@ -181,6 +177,87 @@ class TestCompactConversation(unittest.TestCase):
             None
         )
         self.assertIsNotNone(boundary)
+        # Recent tail is preserved verbatim so the active task does not disappear.
+        self.assertEqual(conv.messages[-1].content, "Here's the code... " * 50)
+
+    def test_compact_preserves_fresh_tail(self):
+        """Compaction summarizes old messages but keeps recent task state."""
+        from src.compact_service.service import compact_conversation
+
+        conv = self._make_conversation([
+            Message(role="user", content=f"Old request {idx} " * 20)
+            if idx % 2 == 0
+            else Message(role="assistant", content=f"Old answer {idx} " * 20)
+            for idx in range(10)
+        ])
+        tail_before = [msg.content for msg in conv.messages[-4:]]
+
+        mock_provider = MagicMock()
+        mock_provider.chat_async = AsyncMock(
+            return_value=ChatResponse(
+                content="Older work was summarized with decisions and files.",
+                model="test",
+                usage={},
+                finish_reason="stop",
+            )
+        )
+
+        result = asyncio.run(
+            compact_conversation(
+                conv,
+                mock_provider,
+                "claude-sonnet-4-6",
+                fresh_tail_messages=4,
+            )
+        )
+
+        self.assertEqual([msg.content for msg in conv.messages[-4:]], tail_before)
+        self.assertLess(result.post_compact_count, 10)
+        self.assertIn("Older work was summarized", result.summary_text)
+
+    def test_compact_writes_context_ledger(self):
+        """Compaction records what was summarized and what stayed raw."""
+        from src.compact_service.service import compact_conversation
+        from src.services.compact.context_ledger import list_context_ledger_records
+
+        conv = self._make_conversation([
+            Message(role="user", content=f"Request {idx} " * 30)
+            if idx % 2 == 0
+            else Message(role="assistant", content=f"Answer {idx} " * 30)
+            for idx in range(8)
+        ])
+
+        mock_provider = MagicMock()
+        mock_provider.chat_async = AsyncMock(
+            return_value=ChatResponse(
+                content="Compact summary with files, decisions, and next steps.",
+                model="test",
+                usage={},
+                finish_reason="stop",
+            )
+        )
+
+        result = asyncio.run(
+            compact_conversation(
+                conv,
+                mock_provider,
+                "claude-sonnet-4-6",
+                fresh_tail_messages=2,
+                session_id="compact-session",
+                ledger_dir=Path(self.tmpdir.name) / "ledger",
+            )
+        )
+        records = list_context_ledger_records(
+            "compact-session",
+            ledger_dir=Path(self.tmpdir.name) / "ledger",
+        )
+
+        self.assertIsNotNone(result.ledger_record)
+        self.assertEqual(records[0]["event"], "compact")
+        actions = {entry["action"] for entry in records[0]["entries"]}
+        self.assertIn("compacted", actions)
+        self.assertIn("preserved", actions)
+        self.assertEqual(records[0]["metadata"]["fresh_tail_count"], 2)
 
     def test_custom_instructions_passed_to_llm(self):
         """Custom instructions are included in the prompt."""

@@ -27,25 +27,13 @@ class TestClaudeCodeToolParity(unittest.TestCase):
         expected = [
             "Agent",
             "AskUserQuestion",
-            "Bash",
+            "BriefPreview",
             "Config",
             "CronCreate",
             "CronDelete",
             "CronList",
-            "Edit",
-            "EnterPlanMode",
-            "EnterWorktree",
-            "ExitPlanMode",
-            "ExitWorktree",
-            "Glob",
-            "Grep",
-            "LSP",
             "ListMcpResourcesTool",
             "MCP",
-            "NotebookEdit",
-            "PowerShell",
-            "REPL",
-            "Read",
             "ReadMcpResourceTool",
             "RemoteTrigger",
             "SendMessage",
@@ -59,11 +47,13 @@ class TestClaudeCodeToolParity(unittest.TestCase):
             "TaskOutput",
             "TaskStop",
             "TaskUpdate",
+            "TeamCreate",
+            "TeamDelete",
             "TodoWrite",
             "ToolSearch",
             "WebFetch",
             "WebSearch",
-            "Write",
+            "McpAuthTool",
         ]
         missing = [name for name in expected if self.registry.get(name) is None]
         self.assertEqual(missing, [])
@@ -105,10 +95,10 @@ class TestClaudeCodeToolParity(unittest.TestCase):
 
     def test_tool_search_select(self) -> None:
         out = self.registry.dispatch(
-            ToolCall(name="ToolSearch", input={"query": "select:Read"}),
+            ToolCall(name="ToolSearch", input={"query": "select:ReadMcpResourceTool"}),
             self.ctx,
         ).output
-        self.assertEqual(out["matches"], ["Read"])
+        self.assertEqual(out["matches"], ["ReadMcpResourceTool"])
 
     def test_todo_write_roundtrip(self) -> None:
         out1 = self.registry.dispatch(
@@ -134,4 +124,3 @@ class TestClaudeCodeToolParity(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-

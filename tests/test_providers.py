@@ -2,12 +2,16 @@
 
 from __future__ import annotations
 
+import io
+import json
+import urllib.error
 import unittest
 from unittest.mock import MagicMock, patch
 
 from src.providers import get_provider_class
 from src.providers.anthropic_provider import AnthropicProvider
 from src.providers.glm_provider import GLMProvider
+from src.providers.openrouter_provider import OpenRouterProvider
 from src.providers.openai_provider import OpenAIProvider
 from src.providers.base import ChatMessage, ChatResponse
 
@@ -307,8 +311,8 @@ class TestGLMProvider(unittest.TestCase):
         self.assertIn("zai/glm-4.5", models)
         self.assertIn("zai/glm-4", models)
 
-    @patch("src.providers.glm_provider.ZhipuAI")
-    def test_chat(self, mock_zhipu):
+    @patch("src.providers.glm_provider.OpenAI")
+    def test_chat(self, mock_openai):
         """Test synchronous chat."""
         # Setup mock
         mock_client = MagicMock()
@@ -322,7 +326,7 @@ class TestGLMProvider(unittest.TestCase):
         )
         mock_response.choices[0].finish_reason = "stop"
         mock_client.chat.completions.create.return_value = mock_response
-        mock_zhipu.return_value = mock_client
+        mock_openai.return_value = mock_client
 
         # Test
         provider = GLMProvider(api_key="test_key")
@@ -332,9 +336,13 @@ class TestGLMProvider(unittest.TestCase):
         self.assertEqual(response.content, "Hello!")
         self.assertEqual(response.model, "glm-4.5")
         self.assertIsNone(response.reasoning_content)
+        mock_openai.assert_called_once_with(
+            api_key="test_key",
+            base_url="https://open.bigmodel.cn/api/paas/v4",
+        )
 
-    @patch("src.providers.glm_provider.ZhipuAI")
-    def test_chat_with_reasoning(self, mock_zhipu):
+    @patch("src.providers.glm_provider.OpenAI")
+    def test_chat_with_reasoning(self, mock_openai):
         """Test chat with reasoning content."""
         # Setup mock
         mock_client = MagicMock()
@@ -348,7 +356,7 @@ class TestGLMProvider(unittest.TestCase):
         )
         mock_response.choices[0].finish_reason = "stop"
         mock_client.chat.completions.create.return_value = mock_response
-        mock_zhipu.return_value = mock_client
+        mock_openai.return_value = mock_client
 
         # Test
         provider = GLMProvider(api_key="test_key")
@@ -357,6 +365,158 @@ class TestGLMProvider(unittest.TestCase):
 
         self.assertEqual(response.content, "Answer")
         self.assertEqual(response.reasoning_content, "Thinking...")
+
+
+class TestOpenRouterProvider(unittest.TestCase):
+    """Test OpenRouter provider without the optional OpenAI SDK."""
+
+    def test_initialization(self):
+        provider = OpenRouterProvider(api_key="test_key")
+
+        self.assertEqual(provider.model, "deepseek/deepseek-v4-flash")
+        self.assertEqual(provider.base_url, "https://openrouter.ai/api/v1")
+        self.assertIn("openrouter/free", provider.get_available_models())
+
+    @patch("src.providers.openrouter_provider.urllib.request.urlopen")
+    def test_chat_uses_direct_http(self, mock_urlopen):
+        mock_urlopen.return_value = _FakeHttpResponse(
+            [
+                b'{"model":"deepseek/deepseek-v4-flash","choices":[{"message":{"content":"Hello!"},"finish_reason":"stop"}],"usage":{"prompt_tokens":7,"completion_tokens":3,"total_tokens":10}}'
+            ]
+        )
+        provider = OpenRouterProvider(api_key="test_key")
+
+        response = provider.chat([ChatMessage(role="user", content="Hi")])
+
+        self.assertEqual(response.content, "Hello!")
+        self.assertEqual(response.usage["total_tokens"], 10)
+        request = mock_urlopen.call_args.args[0]
+        payload = json.loads(request.data.decode("utf-8"))
+        self.assertEqual(request.full_url, "https://openrouter.ai/api/v1/chat/completions")
+        self.assertEqual(request.headers["Authorization"], "Bearer test_key")
+        self.assertEqual(payload["max_tokens"], 4096)
+
+    @patch("src.providers.openrouter_provider.urllib.request.urlopen")
+    def test_chat_caps_expensive_output_token_requests(self, mock_urlopen):
+        mock_urlopen.return_value = _FakeHttpResponse(
+            [
+                b'{"model":"deepseek/deepseek-v4-flash","choices":[{"message":{"content":"Hello!"},"finish_reason":"stop"}],"usage":{"prompt_tokens":7,"completion_tokens":3,"total_tokens":10}}'
+            ]
+        )
+        provider = OpenRouterProvider(api_key="test_key")
+
+        provider.chat([ChatMessage(role="user", content="Hi")], max_tokens=65536)
+
+        request = mock_urlopen.call_args.args[0]
+        payload = json.loads(request.data.decode("utf-8"))
+        self.assertEqual(payload["max_tokens"], 8192)
+
+    @patch("src.providers.openrouter_provider.urllib.request.urlopen")
+    def test_chat_falls_back_to_free_router_when_paid_model_has_no_credits(self, mock_urlopen):
+        mock_urlopen.side_effect = [
+            _http_error(
+                402,
+                b'{"error":{"message":"Insufficient credits. This account never purchased credits."}}',
+            ),
+            _FakeHttpResponse(
+                [
+                    b'{"model":"google/gemma-test:free","choices":[{"message":{"content":"ok"},"finish_reason":"stop"}],"usage":{"prompt_tokens":5,"completion_tokens":1,"total_tokens":6}}'
+                ]
+            ),
+        ]
+        provider = OpenRouterProvider(api_key="test_key")
+
+        response = provider.chat([ChatMessage(role="user", content="Hi")])
+
+        self.assertEqual(response.content, "ok")
+        self.assertEqual(response.model, "google/gemma-test:free")
+        self.assertEqual(mock_urlopen.call_count, 2)
+        first_payload = json.loads(mock_urlopen.call_args_list[0].args[0].data.decode("utf-8"))
+        second_payload = json.loads(mock_urlopen.call_args_list[1].args[0].data.decode("utf-8"))
+        self.assertEqual(first_payload["model"], "deepseek/deepseek-v4-flash")
+        self.assertEqual(second_payload["model"], "openrouter/free")
+        self.assertEqual(second_payload["max_tokens"], 4096)
+
+    @patch("src.providers.openrouter_provider.urllib.request.urlopen")
+    def test_stream_response_rebuilds_tool_calls(self, mock_urlopen):
+        mock_urlopen.return_value = _FakeHttpResponse(
+            [
+                b'data: {"model":"deepseek/deepseek-v4-flash","choices":[{"delta":{"content":"Hi"},"finish_reason":null}]}\n',
+                b'data: {"choices":[{"delta":{"tool_calls":[{"index":0,"id":"call_1","function":{"name":"Read","arguments":"{\\"file_path\\":\\"README.md\\"}"}}]},"finish_reason":"tool_calls"}],"usage":{"prompt_tokens":7,"completion_tokens":3,"total_tokens":10}}\n',
+                b"data: [DONE]\n",
+            ]
+        )
+        provider = OpenRouterProvider(api_key="test_key")
+        chunks: list[str] = []
+
+        response = provider.chat_stream_response(
+            [ChatMessage(role="user", content="Hi")],
+            tools=[{"name": "Read", "description": "", "input_schema": {"type": "object"}}],
+            on_text_chunk=chunks.append,
+        )
+
+        self.assertEqual("".join(chunks), "Hi")
+        self.assertEqual(response.content, "Hi")
+        self.assertEqual(response.finish_reason, "tool_calls")
+        self.assertEqual(response.tool_uses[0]["name"], "Read")
+        self.assertEqual(response.tool_uses[0]["input"]["file_path"], "README.md")
+        self.assertEqual(response.usage["total_tokens"], 10)
+
+    @patch("src.providers.openrouter_provider.urllib.request.urlopen")
+    def test_stream_response_falls_back_to_free_router_when_paid_model_has_no_credits(self, mock_urlopen):
+        mock_urlopen.side_effect = [
+            _http_error(
+                402,
+                b'{"error":{"message":"Insufficient credits. This account never purchased credits."}}',
+            ),
+            _FakeHttpResponse(
+                [
+                    b'data: {"model":"google/gemma-test:free","choices":[{"delta":{"content":"ok"},"finish_reason":"stop"}],"usage":{"prompt_tokens":5,"completion_tokens":1,"total_tokens":6}}\n',
+                    b"data: [DONE]\n",
+                ]
+            ),
+        ]
+        provider = OpenRouterProvider(api_key="test_key")
+        chunks: list[str] = []
+
+        response = provider.chat_stream_response(
+            [ChatMessage(role="user", content="Hi")],
+            on_text_chunk=chunks.append,
+        )
+
+        self.assertEqual("".join(chunks), "ok")
+        self.assertEqual(response.content, "ok")
+        self.assertEqual(response.model, "google/gemma-test:free")
+        self.assertEqual(mock_urlopen.call_count, 2)
+        second_payload = json.loads(mock_urlopen.call_args_list[1].args[0].data.decode("utf-8"))
+        self.assertEqual(second_payload["model"], "openrouter/free")
+
+
+class _FakeHttpResponse:
+    def __init__(self, lines: list[bytes]) -> None:
+        self._lines = lines
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc, traceback):
+        return False
+
+    def read(self) -> bytes:
+        return b"".join(self._lines)
+
+    def __iter__(self):
+        return iter(self._lines)
+
+
+def _http_error(status: int, body: bytes) -> urllib.error.HTTPError:
+    return urllib.error.HTTPError(
+        url="https://openrouter.ai/api/v1/chat/completions",
+        code=status,
+        msg="error",
+        hdrs={},
+        fp=io.BytesIO(body),
+    )
 
 
 class TestGetProviderClass(unittest.TestCase):

@@ -13,12 +13,12 @@ from .model import PromptSkill
 def _candidate_user_skills_dirs() -> list[Path]:
     """Return candidate user-skill directories in priority order.
     Priority:
-      1) $CLAWD_SKILLS_DIR (project-specific)
+      1) $GENEVA_SKILLS_DIR (project-specific)
       2) $CLAUDE_SKILLS_DIR (TS-compatible override)
-      3) ~/.clawd/skills (current project default)
+      3) ~/.geneva/skills (current project default)
       4) ~/.claude/skills (TS-compatible default)
     """
-    env_primary = os.environ.get("CLAWD_SKILLS_DIR")
+    env_primary = os.environ.get("GENEVA_SKILLS_DIR")
     env_ts = os.environ.get("CLAUDE_SKILLS_DIR")
     dirs: list[Path] = []
     if env_primary:
@@ -28,10 +28,23 @@ def _candidate_user_skills_dirs() -> list[Path]:
         if p not in dirs:
             dirs.append(p)
     # Defaults
-    for d in (Path.home() / ".clawd" / "skills", Path.home() / ".claude" / "skills"):
+    for d in (Path.home() / ".geneva" / "skills", Path.home() / ".claude" / "skills"):
         p = d.expanduser().resolve()
         if p not in dirs:
             dirs.append(p)
+    return dirs
+
+
+def _candidate_managed_skills_dirs() -> list[Path]:
+    dirs: list[Path] = []
+    env_value = os.environ.get("GENEVA_MANAGED_SKILLS_DIR")
+    if env_value:
+        path = Path(env_value).expanduser().resolve()
+        if path not in dirs:
+            dirs.append(path)
+    default = (Path.home() / ".geneva" / "skills").expanduser().resolve()
+    if default not in dirs:
+        dirs.append(default)
     return dirs
 
 
@@ -67,6 +80,7 @@ def load_skills_from_dir(base_dir: str | Path, *, loaded_from: str = "skills") -
     if not base.exists() or not base.is_dir():
         return []
 
+    control_records = _load_control_plane_records(base)
     skills: List[PromptSkill] = []
     for entry in sorted(base.iterdir()):
         if not entry.is_dir():
@@ -74,6 +88,11 @@ def load_skills_from_dir(base_dir: str | Path, *, loaded_from: str = "skills") -
         skill_name = entry.name
         md_path = entry / "SKILL.md"
         if not md_path.exists():
+            continue
+        record = control_records.get(skill_name)
+        if record is not None and (
+            record.status != "active" or record.safety.status == "blocked"
+        ):
             continue
         content = md_path.read_text(encoding="utf-8")
         parsed = parse_frontmatter(content)
@@ -139,16 +158,14 @@ def get_all_skills(
         for s in load_skills_from_dir(user_dir, loaded_from="user"):
             _REGISTRY.register(s)
 
-    managed_env = os.environ.get("CLAWD_MANAGED_SKILLS_DIR")
-    if managed_env:
-        managed_dir = Path(managed_env).expanduser().resolve()
+    for managed_dir in _candidate_managed_skills_dirs():
         for s in load_skills_from_dir(managed_dir, loaded_from="managed"):
             _REGISTRY.register(s)
 
     if project_root is not None:
         pr = Path(project_root).expanduser().resolve()
         proj_dirs = []
-        main_path = pr / ".clawd" / "skills"
+        main_path = pr / ".geneva" / "skills"
         compat_path = pr / ".claude" / "skills"
         proj_dirs.append(main_path)
         if compat_path != main_path:
@@ -188,3 +205,16 @@ def _as_str_list(val) -> List[str]:
             return [x.strip() for x in s.split(",") if x.strip()]
         return [s]
     return [str(val)]
+
+
+def _load_control_plane_records(base: Path):
+    try:
+        from src.geneva.skill_control_plane import CONTROL_PLANE_FILE, SkillControlPlane
+
+        if not (base / CONTROL_PLANE_FILE).exists() and base != (
+            Path.home() / ".geneva" / "skills"
+        ).expanduser().resolve():
+            return {}
+        return {record.name: record for record in SkillControlPlane(base).refresh()}
+    except Exception:
+        return {}

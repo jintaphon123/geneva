@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Generator, Optional, Any
+from typing import Callable, Generator, Optional, Any
 
 try:
     import anthropic  # type: ignore
@@ -165,6 +165,7 @@ class MinimaxProvider(BaseProvider):
         messages: list[MessageInput],
         tools: Optional[list[dict[str, Any]]] = None,
         on_text_chunk: TextChunkCallback | None = None,
+        on_tool_ready: Callable[[dict], None] | None = None,
         **kwargs
     ) -> ChatResponse:
         model = self._get_model(**kwargs)

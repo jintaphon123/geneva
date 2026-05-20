@@ -1,16 +1,17 @@
-"""Python package placeholder for the archived `hooks` subsystem."""
+from .post_sampling_hooks import (
+    PostSamplingHook,
+    REPLHookContext,
+    clear_post_sampling_hooks,
+    execute_post_sampling_hooks,
+    observation_masking_hook,
+    register_post_sampling_hook,
+)
 
-from __future__ import annotations
-
-import json
-from pathlib import Path
-
-SNAPSHOT_PATH = Path(__file__).resolve().parent.parent / 'reference_data' / 'subsystems' / 'hooks.json'
-_SNAPSHOT = json.loads(SNAPSHOT_PATH.read_text())
-
-ARCHIVE_NAME = _SNAPSHOT['archive_name']
-MODULE_COUNT = _SNAPSHOT['module_count']
-SAMPLE_FILES = tuple(_SNAPSHOT['sample_files'])
-PORTING_NOTE = f"Python placeholder package for '{ARCHIVE_NAME}' with {MODULE_COUNT} archived module references."
-
-__all__ = ['ARCHIVE_NAME', 'MODULE_COUNT', 'PORTING_NOTE', 'SAMPLE_FILES']
+__all__ = [
+    "PostSamplingHook",
+    "REPLHookContext",
+    "clear_post_sampling_hooks",
+    "execute_post_sampling_hooks",
+    "observation_masking_hook",
+    "register_post_sampling_hook",
+]

@@ -28,12 +28,17 @@ class ToolContext:
     team: dict[str, Any] | None = None
     output_style_name: str | None = None
     output_style_dir: Path | None = None
+    idempotency_cache: dict[str, dict] = field(default_factory=dict)
 
     # Permission handler callback: called when a tool needs user consent.
     # Signature: (tool_name: str, message: str, suggestion: str | None)
     #           -> tuple[bool, bool] (allowed: bool, continue_without_caching: bool)
     # If not set, permission errors will be raised as exceptions.
     permission_handler: Callable[[str, str, Optional[str]], tuple[bool, bool]] | None = None
+
+    # Called when a background bash task completes:
+    # (task_id: str, command: str, result: dict) -> None
+    bg_task_notify: Callable[..., None] | None = None
 
     def __post_init__(self) -> None:
         self.workspace_root = Path(self.workspace_root).resolve()

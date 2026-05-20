@@ -134,7 +134,7 @@ def microcompact_messages(
     compactable_ids: list[str] = []
     for msg in messages:
         content = msg.get("content", [])
-        if msg.get("type") == "assistant" and isinstance(content, list):
+        if (msg.get("role") == "assistant" or msg.get("type") == "assistant") and isinstance(content, list):
             for block in content:
                 if (
                     isinstance(block, dict)

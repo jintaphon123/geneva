@@ -201,6 +201,41 @@ class TestMicrocompactMessages(unittest.TestCase):
                             cleared_count += 1
         self.assertEqual(cleared_count, 2)
 
+    def test_clears_old_tool_results_with_role_assistant_shape(self):
+        """Production API messages use role=assistant, not type=assistant."""
+        from src.context_system.microcompact import microcompact_messages, CLEARED_MESSAGE
+
+        messages = []
+        for idx in range(3):
+            tool_id = f"tool{idx}"
+            messages.append(
+                {
+                    "role": "assistant",
+                    "content": [
+                        {"type": "tool_use", "id": tool_id, "name": "Read", "input": {"file_path": f"{idx}.txt"}},
+                    ],
+                }
+            )
+            messages.append(
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "tool_result", "tool_use_id": tool_id, "content": "large content " * 200},
+                    ],
+                }
+            )
+
+        result, saved = microcompact_messages(messages, keep_recent=1)
+
+        self.assertGreater(saved, 0)
+        cleared = [
+            block
+            for msg in result
+            for block in (msg.get("content") if isinstance(msg.get("content"), list) else [])
+            if isinstance(block, dict) and block.get("content") == CLEARED_MESSAGE
+        ]
+        self.assertEqual(len(cleared), 2)
+
     def test_non_compactable_tools_not_cleared(self):
         """Tool results from non-compactable tools are not cleared."""
         from src.context_system.microcompact import microcompact_messages, CLEARED_MESSAGE

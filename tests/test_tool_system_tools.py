@@ -71,7 +71,8 @@ class TestReadTool(ToolSystemTests):
         tool = FileReadTool()
         out = tool.run({"file_path": str(p), "offset": 2, "limit": 2}, self.ctx).output
         self.assertEqual(out["type"], "text")
-        self.assertEqual(out["file"]["content"], "2\tline2\n3\tline3")
+        self.assertTrue(out["file"]["content"].startswith("[UNTRUSTED SOURCE]"))
+        self.assertIn("2\tline2\n3\tline3", out["file"]["content"])
 
     def test_read_allows_relative_path_under_workspace(self) -> None:
         p = self.root / "a.txt"
@@ -323,7 +324,7 @@ class TestSkillTool(ToolSystemTests):
             body="Hello $ARGUMENTS[0]!",
             arguments=["name"],
         )
-        with patch.dict(os.environ, {"CLAWD_SKILLS_DIR": str(skills_dir)}):
+        with patch.dict(os.environ, {"GENEVA_SKILLS_DIR": str(skills_dir)}):
             out = SkillTool().run({"skill": "hello", "args": "bob"}, self.ctx).output
             self.assertTrue(out["success"])
             self.assertIn("Hello bob!", out["prompt"])
@@ -336,7 +337,7 @@ class TestSkillTool(ToolSystemTests):
             "def run(input, context):\n    return 'hi ' + input.get('name','world')\n",
             encoding="utf-8",
         )
-        with patch.dict(os.environ, {"CLAWD_SKILLS_DIR": str(skills_dir)}):
+        with patch.dict(os.environ, {"GENEVA_SKILLS_DIR": str(skills_dir)}):
             out = SkillTool().run({"name": "legacy", "input": {"name": "bob"}}, self.ctx).output
             self.assertEqual(out["output"], "hi bob")
 
@@ -381,8 +382,8 @@ class TestNewParityTools(ToolSystemTests):
 
     def test_tool_search(self) -> None:
         reg = build_default_registry(include_user_tools=False)
-        out = ToolSearchTool(reg).run({"query": "read"}, self.ctx).output
-        self.assertIn("Read", out["matches"])
+        out = ToolSearchTool(reg).run({"query": "resource"}, self.ctx).output
+        self.assertIn("ReadMcpResourceTool", out["matches"])
 
     def test_cron_tools_roundtrip(self) -> None:
         created = CronCreateTool().run({"cron": "*/5 * * * *", "prompt": "ping"}, self.ctx).output
@@ -463,7 +464,7 @@ class TestTeamTools(ToolSystemTests):
         self.assertEqual(self.ctx.team["team_name"], "test-team")
 
         # Verify team file was created
-        team_file = self.root / ".clawd" / "team.json"
+        team_file = self.root / ".geneva" / "team.json"
         self.assertTrue(team_file.exists())
 
         # Delete team
@@ -499,7 +500,7 @@ class TestWorktreeTools(ToolSystemTests):
         self.assertEqual(self.ctx.cwd, self.ctx.worktree_root)
 
         # Verify worktree directory exists
-        worktree_dir = self.root / ".clawd" / "worktrees" / "test-tree"
+        worktree_dir = self.root / ".geneva" / "worktrees" / "test-tree"
         self.assertTrue(worktree_dir.exists())
 
         # Exit worktree
@@ -565,7 +566,7 @@ class TestPlanModeTools(ToolSystemTests):
         self.assertIsNotNone(exit_out["filePath"])
 
         # Verify plan file was created
-        plan_file = self.root / ".clawd" / "plan.md"
+        plan_file = self.root / ".geneva" / "plan.md"
         self.assertTrue(plan_file.exists())
         self.assertEqual(plan_file.read_text(encoding="utf-8"), plan_content)
 

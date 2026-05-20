@@ -1,7 +1,7 @@
 """
-Command system for Clawd Code.
+Command system for Geneva.
 
-A complete reimplementation of Claude Code's command system.
+Slash command registry and execution helpers for the Geneva agent harness.
 """
 
 from .argument_substitution import parse_argument_names, substitute_arguments

@@ -6,9 +6,10 @@ OpenAI-style /chat/completions API (OpenAI, GLM, Minimax, etc.).
 
 from __future__ import annotations
 
-import json
 from abc import abstractmethod
-from typing import Any, Generator, Optional
+from typing import Any, Callable, Generator, Optional
+
+from src.services.model_normalizer import repair_tool_call_json as _repair_tool_json
 
 from .base import BaseProvider, ChatResponse, MessageInput, TextChunkCallback
 
@@ -140,14 +141,12 @@ class OpenAICompatibleProvider(BaseProvider):
         if hasattr(choice.message, "tool_calls") and choice.message.tool_calls:
             tool_uses = []
             for tc in choice.message.tool_calls:
-                try:
-                    args = json.loads(tc.function.arguments) if tc.function.arguments else {}
-                except Exception:
-                    args = {}
+                raw_args = tc.function.arguments or "{}"
+                parsed_input = _repair_tool_json(raw_args) or {}
                 tool_uses.append({
                     "id": tc.id,
                     "name": tc.function.name,
-                    "input": args,
+                    "input": parsed_input,
                 })
 
         return ChatResponse(
@@ -204,6 +203,7 @@ class OpenAICompatibleProvider(BaseProvider):
         messages: list[MessageInput],
         tools: Optional[list[dict[str, Any]]] = None,
         on_text_chunk: TextChunkCallback | None = None,
+        on_tool_ready: Callable[[dict], None] | None = None,
         **kwargs
     ) -> ChatResponse:
         """Stream OpenAI-compatible chunks while rebuilding the final response."""
@@ -281,14 +281,12 @@ class OpenAICompatibleProvider(BaseProvider):
             item = tool_calls_by_index[idx]
             if not item["name"]:
                 continue
-            try:
-                parsed_args = json.loads(item["arguments"]) if item["arguments"] else {}
-            except Exception:
-                parsed_args = {}
+            raw_args = item.get("arguments") or "{}"
+            parsed_input = _repair_tool_json(raw_args) or {}
             tool_uses.append({
                 "id": item["id"] or f"tool_call_{idx}",
                 "name": item["name"],
-                "input": parsed_args,
+                "input": parsed_input,
             })
 
         reasoning_content = "".join(reasoning_parts) if reasoning_parts else None

@@ -1,16 +1,11 @@
-"""Python package placeholder for the archived `coordinator` subsystem."""
+from .coordinator_mode import (
+    get_coordinator_system_prompt,
+    get_coordinator_user_context,
+    is_coordinator_mode,
+)
 
-from __future__ import annotations
-
-import json
-from pathlib import Path
-
-SNAPSHOT_PATH = Path(__file__).resolve().parent.parent / 'reference_data' / 'subsystems' / 'coordinator.json'
-_SNAPSHOT = json.loads(SNAPSHOT_PATH.read_text())
-
-ARCHIVE_NAME = _SNAPSHOT['archive_name']
-MODULE_COUNT = _SNAPSHOT['module_count']
-SAMPLE_FILES = tuple(_SNAPSHOT['sample_files'])
-PORTING_NOTE = f"Python placeholder package for '{ARCHIVE_NAME}' with {MODULE_COUNT} archived module references."
-
-__all__ = ['ARCHIVE_NAME', 'MODULE_COUNT', 'PORTING_NOTE', 'SAMPLE_FILES']
+__all__ = [
+    "get_coordinator_system_prompt",
+    "get_coordinator_user_context",
+    "is_coordinator_mode",
+]

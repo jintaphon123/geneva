@@ -22,9 +22,9 @@ class SendUserMessageTool:
                 "properties": {
                     "message": {"type": "string"},
                     "attachments": {"type": "array", "items": {"type": "string"}},
-                    "status": {"type": "string", "enum": ["normal", "proactive"]},
+                    "status": {"type": "string", "enum": ["normal", "proactive"], "default": "normal"},
                 },
-                "required": ["message", "status"],
+                "required": ["message"],
             },
             aliases=("Brief",),
             is_read_only=True,
@@ -38,6 +38,8 @@ class SendUserMessageTool:
 
         if not isinstance(message, str):
             raise ToolInputError("message must be a string")
+        if status is None:
+            status = "normal"
         if status not in {"normal", "proactive"}:
             raise ToolInputError("status must be 'normal' or 'proactive'")
         if attachments is not None and not isinstance(attachments, list):

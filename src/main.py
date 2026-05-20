@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import argparse
+from pathlib import Path
 
+from .bootstrap import state
 from .bootstrap_graph import build_bootstrap_graph
 from .command_graph import build_command_graph
 from .commands import execute_command, get_command, get_commands, render_command_index
@@ -19,7 +21,7 @@ from .tools import execute_tool, get_tool, get_tools, render_tool_index
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description='Python porting workspace for the Claude Code rewrite effort')
+    parser = argparse.ArgumentParser(description="Geneva local agent harness workspace")
     subparsers = parser.add_subparsers(dest='command', required=True)
     subparsers.add_parser('summary', help='render a Markdown summary of the Python porting workspace')
     subparsers.add_parser('manifest', help='print the current Python workspace manifest')
@@ -94,6 +96,7 @@ def build_parser() -> argparse.ArgumentParser:
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
+    state.current_working_directory = Path(getattr(args, "cwd", None) or Path.cwd())
     manifest = build_port_manifest()
     if args.command == 'summary':
         print(QueryEnginePort(manifest).render_summary())

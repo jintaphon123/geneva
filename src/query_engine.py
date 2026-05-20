@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import inspect
 import json
 from dataclasses import dataclass, field
+from typing import Any
 from uuid import uuid4
 
 from .commands import build_command_backlog
@@ -10,6 +12,7 @@ from .port_manifest import PortManifest, build_port_manifest
 from .session_store import StoredSession, load_session, save_session
 from .tools import build_tool_backlog
 from .transcript import TranscriptStore
+from .utils.asyncio_tools import run_awaitable_sync
 
 
 @dataclass(frozen=True)
@@ -41,6 +44,7 @@ class QueryEnginePort:
     permission_denials: list[PermissionDenial] = field(default_factory=list)
     total_usage: UsageSummary = field(default_factory=UsageSummary)
     transcript_store: TranscriptStore = field(default_factory=TranscriptStore)
+    extraction_agent_caller: Any | None = None
 
     @classmethod
     def from_workspace(cls) -> 'QueryEnginePort':
@@ -65,8 +69,44 @@ class QueryEnginePort:
         matched_tools: tuple[str, ...] = (),
         denied_tools: tuple[PermissionDenial, ...] = (),
     ) -> TurnResult:
+        current_user_message = prompt
+        memory_blocks: list[str] = []
+        try:
+            from src.memdir.brain_engine import refresh_context
+
+            _brain_block = refresh_context(
+                session_query=current_user_message,
+                max_tokens=3000,
+            )
+            if _brain_block:
+                memory_blocks.append(str(_brain_block))
+        except Exception:
+            pass
+
+        try:
+            from src.services.session_memory.session_memory import load_session_memory
+
+            _session_mem = load_session_memory()
+            if inspect.isawaitable(_session_mem):
+                _session_mem = run_awaitable_sync(_session_mem)
+            if _session_mem:
+                memory_blocks.append(str(_session_mem))
+        except Exception:
+            pass
+
+        try:
+            from src.memdir.memdir import load_memory_prompt
+
+            _mem_prompt = load_memory_prompt()
+            if _mem_prompt:
+                memory_blocks.append(str(_mem_prompt))
+        except Exception:
+            pass
+
+        merged_memory = "\n\n".join(block for block in memory_blocks if block)
+        effective_prompt = f"{merged_memory}\n\n{prompt}" if merged_memory else prompt
         if len(self.mutable_messages) >= self.config.max_turns:
-            output = f'Max turns reached before processing prompt: {prompt}'
+            output = f'Max turns reached before processing prompt: {effective_prompt}'
             return TurnResult(
                 prompt=prompt,
                 output=output,
@@ -78,13 +118,13 @@ class QueryEnginePort:
             )
 
         summary_lines = [
-            f'Prompt: {prompt}',
+            f'Prompt: {effective_prompt}',
             f'Matched commands: {", ".join(matched_commands) if matched_commands else "none"}',
             f'Matched tools: {", ".join(matched_tools) if matched_tools else "none"}',
             f'Permission denials: {len(denied_tools)}',
         ]
         output = self._format_output(summary_lines)
-        projected_usage = self.total_usage.add_turn(prompt, output)
+        projected_usage = self.total_usage.add_turn(effective_prompt, output)
         stop_reason = 'completed'
         if projected_usage.input_tokens + projected_usage.output_tokens > self.config.max_budget_tokens:
             stop_reason = 'max_budget_reached'
@@ -93,6 +133,22 @@ class QueryEnginePort:
         self.permission_denials.extend(denied_tools)
         self.total_usage = projected_usage
         self.compact_messages_if_needed()
+        try:
+            from src.services.extract_memories.extract_memories import run_extraction
+
+            context = {
+                "prompt": prompt,
+                "session_id": self.session_id,
+                "messages": [
+                    {"role": "user", "content": message}
+                    for message in self.mutable_messages
+                ],
+            }
+            extraction_result = run_extraction(context, agent_caller=self.extraction_agent_caller)
+            if inspect.isawaitable(extraction_result):
+                run_awaitable_sync(extraction_result)
+        except Exception:
+            pass
         return TurnResult(
             prompt=prompt,
             output=output,

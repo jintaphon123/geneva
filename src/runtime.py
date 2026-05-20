@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from pathlib import Path
 
+from src.bootstrap import state as _state
 from .commands import PORTED_COMMANDS
 from .context import PortContext, build_port_context, render_context
 from .history import HistoryLog
@@ -11,6 +13,18 @@ from .setup import SetupReport, WorkspaceSetup, run_setup
 from .system_init import build_system_init_message
 from .tools import PORTED_TOOLS
 from .execution_registry import build_execution_registry
+from src.coordinator.coordinator_mode import is_coordinator_mode
+from src.hooks.post_sampling_hooks import REPLHookContext, execute_post_sampling_hooks
+from src.utils.asyncio_tools import run_awaitable_sync
+
+_state.current_working_directory = Path.cwd()
+
+try:
+    from src.services.auto_dream.auto_dream import init_auto_dream
+
+    init_auto_dream()
+except Exception:
+    pass
 
 
 @dataclass(frozen=True)
@@ -87,6 +101,9 @@ class RuntimeSession:
 
 
 class PortRuntime:
+    def __init__(self) -> None:
+        _state.current_working_directory = Path.cwd()
+
     def route_prompt(self, prompt: str, limit: int = 5) -> list[RoutedMatch]:
         tokens = {token.lower() for token in prompt.replace('/', ' ').replace('-', ' ').split() if token}
         by_kind = {
@@ -131,6 +148,16 @@ class PortRuntime:
             matched_tools=tuple(match.name for match in matches if match.kind == 'tool'),
             denied_tools=denials,
         )
+        try:
+            hook_context = REPLHookContext(
+                messages=[{"role": "user", "content": message} for message in engine.mutable_messages],
+                system_prompt=build_system_init_message(trusted=True),
+                tool_use_context={},
+                user_context={"coordinator_mode": "on" if is_coordinator_mode() else "off"},
+            )
+            run_awaitable_sync(execute_post_sampling_hooks(hook_context))
+        except Exception:
+            pass
         persisted_session_path = engine.persist_session()
         history.add('routing', f'matches={len(matches)} for prompt={prompt!r}')
         history.add('execution', f'command_execs={len(command_execs)} tool_execs={len(tool_execs)}')

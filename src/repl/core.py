@@ -1,4 +1,4 @@
-"""Interactive REPL for Clawd Codex."""
+"""Interactive REPL for Geneva."""
 
 from __future__ import annotations
 
@@ -66,19 +66,23 @@ except ModuleNotFoundError:  # pragma: no cover
     class Markdown:  # type: ignore
         def __init__(self, text: str):
             self.text = text
-from pathlib import Path
 import asyncio
-import sys
 import json
+import shlex
+import sys
+from pathlib import Path
 from typing import Any
 
 from src.agent import Session
+from src.agent.conversation import TextContentBlock, ToolResultContentBlock, ToolUseContentBlock
+from src.context_system.builder import build_context_prompt
 from src.config import get_provider_config
 from src.outputStyles import resolve_output_style
 from src.providers import get_provider_class
 from src.providers.anthropic_provider import AnthropicProvider
 from src.providers.base import ChatMessage
 from src.providers.minimax_provider import MinimaxProvider
+from src.hooks.post_sampling_hooks import REPLHookContext, execute_post_sampling_hooks
 from src.tool_system.context import ToolContext
 from src.tool_system.defaults import build_default_registry
 from src.tool_system.protocol import ToolCall
@@ -91,14 +95,19 @@ from src.command_system import (
     create_command_context,
     execute_command_async,
     execute_command_sync,
+    get_command_registry,
+    LocalCommand,
+    LocalCommandResult,
     register_builtin_commands,
 )
-from src.cost_tracker import CostTracker
+from src.cost_tracker import CostEntry, CostTracker
 from src.history import HistoryLog
+from src.commands import COMMANDS as EXTERNAL_COMMANDS
+from src.utils.asyncio_tools import run_awaitable_sync
 
 
-class ClawdREPL:
-    """Interactive REPL for Clawd Codex."""
+class GenevaREPL:
+    """Interactive REPL for Geneva."""
 
     def __init__(self, provider_name: str = "glm", stream: bool = False):
         self.console = Console()
@@ -110,7 +119,7 @@ class ClawdREPL:
         config = get_provider_config(provider_name)
         if not config.get("api_key"):
             self.console.print("[red]Error: API key not configured.[/red]")
-            self.console.print("Run [bold]clawd login[/bold] to configure.")
+            self.console.print("Run [bold]geneva login[/bold] to configure.")
             sys.exit(1)
 
         # Initialize provider
@@ -158,8 +167,12 @@ class ClawdREPL:
         self._init_command_system()
 
         # Prompt toolkit with tab completion
-        history_file = Path.home() / ".clawd" / "history"
-        history_file.parent.mkdir(parents=True, exist_ok=True)
+        history_file = Path.home() / ".geneva" / "history"
+        try:
+            history_file.parent.mkdir(parents=True, exist_ok=True)
+        except PermissionError:
+            history_file = Path.cwd() / ".geneva_history"
+            history_file.parent.mkdir(parents=True, exist_ok=True)
 
         self.completer = WordCompleter(self._get_slash_command_words(), ignore_case=True)
 
@@ -347,6 +360,7 @@ class ClawdREPL:
         # Create command registry and register built-ins
         self.command_registry = CommandRegistry()
         register_builtin_commands(self.command_registry)
+        self._bridge_external_commands()
 
         # Create cost tracker and history
         self.cost_tracker = CostTracker()
@@ -362,6 +376,39 @@ class ClawdREPL:
 
         # Merge new commands with built-in list for completion
         self._update_built_in_commands_with_command_system()
+
+    def _run_async_blocking(self, awaitable):
+        return run_awaitable_sync(awaitable)
+
+    def _bridge_external_commands(self) -> None:
+        global_registry = get_command_registry()
+        seen: set[str] = set()
+
+        for meta in EXTERNAL_COMMANDS.values():
+            if meta.name in seen:
+                continue
+            seen.add(meta.name)
+            if self.command_registry.has(meta.name) or global_registry.has(meta.name):
+                continue
+
+            command = LocalCommand(
+                name=meta.name,
+                description=meta.description,
+                aliases=list(meta.aliases),
+                supports_non_interactive=True,
+                loaded_from="bundled",
+            )
+
+            def _call(args: str, context, _meta=meta):
+                del context
+                parsed_args = shlex.split(args) if args.strip() else []
+                result = self._run_async_blocking(_meta.run(parsed_args))
+                text = "" if result is None else str(result)
+                return LocalCommandResult(type="text", value=text, display_text=text)
+
+            command.set_call(_call)
+            self.command_registry.register(command)
+            global_registry.register(command)
 
     def _update_built_in_commands_with_command_system(self):
         """Update the built-in commands list with commands from the new system."""
@@ -394,8 +441,16 @@ class ClawdREPL:
             )
             if success:
                 return True, result_text
-            else:
-                return False, error
+        except Exception:
+            pass
+
+        try:
+            result = self._run_async_blocking(
+                self._try_execute_command_async(command, args)
+            )
+            if result.success:
+                return True, result.text if result.result_type == "text" else None
+            return False, result.error
         except Exception as e:
             return False, str(e)
 
@@ -575,15 +630,14 @@ class ClawdREPL:
         model_label = self.provider.model or "Unknown model"
 
         mascot_ascii = "\n".join([
-            "  /\\__/\\",
-            " / o  o \\",
-            "(  __  )",
-            " \\/__/  ",
+            "   ●──────────── ○  ",
+            "                    ",
+            "   P e r s o n a l  ",
+            "     A I  B r a i n ",
         ])
 
         if Panel is None or Group is None or Align is None or Table is None or Text is None or Columns is None:
-            print(mascot_ascii)
-            print(f"Clawd Codex v{__version__}")
+            print(f"Geneva v{__version__}  ●──────── ○")
             print(f"{model_label} · {provider_label}")
             print(f"{display_path}\n")
             return
@@ -593,7 +647,7 @@ class ClawdREPL:
         table = Table.grid(padding=(0, 1))
         table.add_column(style="bright_black", justify="right", no_wrap=True)
         table.add_column(style="white", ratio=1)
-        table.add_row("Version", Text.assemble(("Clawd Codex", "bold white"), ("  ", ""), (f"v{__version__}", "bold cyan")))
+        table.add_row("Version", Text.assemble(("Geneva", "bold white"), ("  ", ""), (f"v{__version__}", "bold cyan")))
         table.add_row("Model", Text(model_label, style="bold magenta"))
         table.add_row("Provider", Text(provider_label, style="bold green"))
         table.add_row("Workspace", Text(self._truncate_middle(display_path, content_width - 12), style="bold blue"))
@@ -608,7 +662,7 @@ class ClawdREPL:
         header = Panel(
             body,
             border_style="bright_black",
-            title="[bold bright_cyan] CLAWD CODE [/bold bright_cyan]",
+            title="[bold bright_cyan] GENEVA [/bold bright_cyan]",
             subtitle="[dim]interactive terminal[/dim]",
             padding=(1, 2),
         )
@@ -687,13 +741,9 @@ class ClawdREPL:
                 # Use async path for PromptCommand
                 try:
                     # Run async command execution in a new event loop
-                    import concurrent.futures
-                    with concurrent.futures.ThreadPoolExecutor() as executor:
-                        future = executor.submit(
-                            asyncio.run,
-                            self._try_execute_command_async(cmd_name, args)
-                        )
-                        result = future.result()
+                    result = self._run_async_blocking(
+                        self._try_execute_command_async(cmd_name, args)
+                    )
 
                     if result.success:
                         self._handle_command_result(result)
@@ -720,13 +770,9 @@ class ClawdREPL:
                 # Use async path for PromptCommand
                 # Run in a new event loop since we're in a sync context
                 try:
-                    import concurrent.futures
-                    with concurrent.futures.ThreadPoolExecutor() as executor:
-                        future = executor.submit(
-                            asyncio.run,
-                            self._try_execute_command_async(cmd_name, args)
-                        )
-                        result = future.result()
+                    result = self._run_async_blocking(
+                        self._try_execute_command_async(cmd_name, args)
+                    )
 
                     if result.success:
                         if self._handle_command_result(result):
@@ -977,7 +1023,7 @@ class ClawdREPL:
             if not skills:
                 self.console.print("\n[bold]Available Skills:[/bold]")
                 self.console.print("[dim]No skills found.[/dim]")
-                self.console.print("[dim]Create skills in ~/.clawd/skills/ or ~/.claude/skills/ or .clawd/skills/ in your project.[/dim]")
+                self.console.print("[dim]Create skills in ~/.geneva/skills/ or ~/.claude/skills/ or .geneva/skills/ in your project.[/dim]")
                 return
 
             # Group skills by source
@@ -1014,7 +1060,7 @@ class ClawdREPL:
         e = err.lower()
         if name == "read" and e.startswith("file not found:"):
             p = err.split(":", 2)[-1].strip()
-            if "/.clawd/skills/" in p or "\\.clawd\\skills\\" in p or "/.claude/skills/" in p or "\\.claude\\skills\\" in p:
+            if "/.geneva/skills/" in p or "\\.geneva\\skills\\" in p or "/.claude/skills/" in p or "\\.claude\\skills\\" in p:
                 return True
         return False
 
@@ -1024,7 +1070,7 @@ class ClawdREPL:
     def _build_direct_stream_payload(self) -> tuple[list[dict[str, Any]], dict[str, Any]]:
         style_name = getattr(self.tool_context, "output_style_name", None)
         style_dir = getattr(self.tool_context, "output_style_dir", None)
-        style_prompt = resolve_output_style(style_name, style_dir).prompt
+        style_prompt = self._build_effective_system_prompt(style_name, style_dir)
 
         if self._provider_uses_system_kwarg():
             return self.session.conversation.get_messages(), (
@@ -1038,6 +1084,141 @@ class ClawdREPL:
         if style_prompt.strip():
             messages = [{"role": "system", "content": style_prompt}, *messages]
         return messages, {}
+
+    def _build_effective_system_prompt(self, style_name: str | None = None, style_dir = None) -> str:
+        prompt = resolve_output_style(style_name, style_dir).prompt
+        extra = getattr(self.tool_context, "extra_system_prompt", "")
+        if extra:
+            prompt = f"{prompt}\n\n{extra}" if prompt else str(extra)
+        try:
+            context_prompt = build_context_prompt(
+                self.tool_context.workspace_root,
+                cwd=self.tool_context.cwd,
+            )
+        except Exception:
+            context_prompt = ""
+        if context_prompt.strip():
+            prompt = f"{prompt}\n\n{context_prompt}" if prompt else context_prompt
+        return prompt
+
+    def _build_memory_block(self, user_input: str) -> str:
+        blocks: list[str] = []
+        try:
+            from src.memdir.brain_engine import refresh_context
+
+            block = refresh_context(session_query=user_input, max_tokens=3000)
+            if block:
+                blocks.append(str(block))
+        except Exception:
+            pass
+
+        try:
+            from src.services.session_memory.session_memory import load_session_memory
+
+            session_block = load_session_memory()
+            if asyncio.iscoroutine(session_block):
+                session_block = self._run_async_blocking(session_block)
+            if session_block:
+                blocks.append(str(session_block))
+        except Exception:
+            pass
+
+        try:
+            from src.memdir.memdir import load_memory_prompt
+
+            prompt = load_memory_prompt(cwd=self.tool_context.cwd or self.tool_context.workspace_root)
+            if prompt:
+                blocks.append(str(prompt))
+        except Exception:
+            pass
+
+        deduped: list[str] = []
+        seen: set[str] = set()
+        for block in blocks:
+            normalized = block.strip()
+            if not normalized or normalized in seen:
+                continue
+            seen.add(normalized)
+            deduped.append(normalized)
+        return "\n\n".join(deduped)
+
+    def _run_post_sampling_hooks(self, system_prompt: str) -> None:
+        try:
+            api_messages = self.session.conversation.get_messages()
+            ctx = REPLHookContext(
+                messages=api_messages,
+                system_prompt=system_prompt,
+                tool_use_context={},
+                user_context={},
+            )
+            self._run_async_blocking(execute_post_sampling_hooks(ctx))
+            self._apply_hook_message_updates(api_messages)
+        except Exception:
+            pass
+
+    def _apply_hook_message_updates(self, api_messages: list[dict[str, Any]]) -> None:
+        conversation_messages = [
+            message
+            for message in self.session.conversation.messages
+            if not getattr(message, "_is_internal", False)
+        ]
+        for message, api_message in zip(conversation_messages, api_messages):
+            content = api_message.get("content")
+            if isinstance(content, str):
+                message.content = content
+                continue
+            if isinstance(content, list):
+                message.content = self._convert_api_blocks(content)
+
+    def _convert_api_blocks(self, blocks: list[dict[str, Any]]) -> list[Any]:
+        converted: list[Any] = []
+        for block in blocks:
+            if not isinstance(block, dict):
+                continue
+            block_type = str(block.get("type", "")).lower()
+            if block_type == "text":
+                converted.append(TextContentBlock(type="text", text=str(block.get("text", ""))))
+            elif block_type == "tool_use":
+                converted.append(
+                    ToolUseContentBlock(
+                        type="tool_use",
+                        id=str(block.get("id", "")),
+                        name=str(block.get("name", "")),
+                        input=dict(block.get("input", {})) if isinstance(block.get("input"), dict) else {},
+                    )
+                )
+            elif block_type == "tool_result":
+                converted.append(
+                    ToolResultContentBlock(
+                        type="tool_result",
+                        tool_use_id=str(block.get("tool_use_id", "")),
+                        content=block.get("content", ""),
+                        is_error=bool(block.get("is_error", False)),
+                    )
+                )
+        return converted
+
+    def _run_memory_extraction(self, user_input: str) -> None:
+        try:
+            from src.services.extract_memories.extract_memories import run_extraction
+
+            extraction_ctx = {
+                "user_request": user_input,
+                "session_id": getattr(self.session, "session_id", ""),
+                "messages": self.session.conversation.get_messages(),
+            }
+            self._run_async_blocking(
+                run_extraction(
+                    extraction_ctx,
+                    agent_caller=self._call_memory_extraction_agent,
+                )
+            )
+        except Exception:
+            pass
+
+    def _call_memory_extraction_agent(self, prompt: str) -> str:
+        response = self.provider.chat([{"role": "user", "content": prompt}])
+        return str(getattr(response, "content", "") or "")
 
     def _should_try_direct_stream(self, user_input: str) -> bool:
         if not self.stream:
@@ -1124,6 +1305,10 @@ class ClawdREPL:
         """
         # Add user message
         self.session.conversation.add_user_message(user_input)
+        previous_extra_prompt = getattr(self.tool_context, "extra_system_prompt", "")
+        turn_memory_block = self._build_memory_block(user_input)
+        self.tool_context.extra_system_prompt = turn_memory_block
+        self.command_context.config["system_prompt"] = turn_memory_block
 
         try:
             self.console.print("\n[bold]Assistant[/bold]")
@@ -1180,6 +1365,8 @@ class ClawdREPL:
                     direct_response = self._stream_direct_response(on_text_chunk=on_text_chunk)
                 self._current_status = None
                 if direct_response is not None:
+                    self._run_post_sampling_hooks(self._build_effective_system_prompt())
+                    self._run_memory_extraction(user_input)
                     self.console.print("\n")
                     return
 
@@ -1204,13 +1391,23 @@ class ClawdREPL:
                 input_tokens = result.usage.get("input_tokens", 0)
                 output_tokens = result.usage.get("output_tokens", 0)
                 if input_tokens > 0 or output_tokens > 0:
-                    self.cost_tracker.record(
-                        f"turn_{result.num_turns}_tokens",
-                        input_tokens + output_tokens
+                    self.cost_tracker.add_cost(
+                        CostEntry(
+                            model=self.provider.model or self.provider_name,
+                            input_tokens=int(input_tokens),
+                            output_tokens=int(output_tokens),
+                            cache_read_tokens=0,
+                            cache_write_tokens=0,
+                            cost_usd=0.0,
+                            timestamp="",
+                        )
                     )
                     # Also update command context for new commands
                     if hasattr(self, 'command_context') and self.command_context:
                         self.command_context.cost_tracker = self.cost_tracker
+
+            self._run_post_sampling_hooks(self._build_effective_system_prompt())
+            self._run_memory_extraction(user_input)
 
             if self.stream and stream_started:
                 self.console.print()
@@ -1238,12 +1435,15 @@ class ClawdREPL:
                 if choice == "y":
                     self._handle_relogin()
                 else:
-                    self.console.print("\n[dim]You can run [bold]clawd login[/bold] later to update your API key.[/dim]")
+                    self.console.print("\n[dim]You can run [bold]geneva login[/bold] later to update your API key.[/dim]")
             else:
                 # Generic error handling
                 self.console.print(f"\n[red]Error: {e}[/red]")
                 import traceback
                 traceback.print_exc()
+        finally:
+            self.tool_context.extra_system_prompt = previous_extra_prompt
+            self.command_context.config["system_prompt"] = previous_extra_prompt
 
     def _handle_relogin(self):
         """Handle re-authentication when API key fails."""

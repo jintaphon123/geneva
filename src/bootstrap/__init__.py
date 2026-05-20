@@ -1,16 +1,41 @@
-"""Python package placeholder for the archived `bootstrap` subsystem."""
+from .state import (
+    TokenUsage,
+    add_to_tool_duration,
+    add_to_total_cost_state,
+    add_to_total_lines_changed,
+    clear_registered_hooks,
+    current_working_directory,
+    feature_enabled,
+    get_registered_hooks,
+    get_session_id,
+    get_total_cost_usd,
+    hook_registry,
+    plan_mode,
+    per_model_tokens,
+    register_hook_callbacks,
+    regenerate_session_id,
+    reset_cost_state,
+    session_id,
+    total_cost_usd,
+)
 
-from __future__ import annotations
-
-import json
-from pathlib import Path
-
-SNAPSHOT_PATH = Path(__file__).resolve().parent.parent / 'reference_data' / 'subsystems' / 'bootstrap.json'
-_SNAPSHOT = json.loads(SNAPSHOT_PATH.read_text())
-
-ARCHIVE_NAME = _SNAPSHOT['archive_name']
-MODULE_COUNT = _SNAPSHOT['module_count']
-SAMPLE_FILES = tuple(_SNAPSHOT['sample_files'])
-PORTING_NOTE = f"Python placeholder package for '{ARCHIVE_NAME}' with {MODULE_COUNT} archived module references."
-
-__all__ = ['ARCHIVE_NAME', 'MODULE_COUNT', 'PORTING_NOTE', 'SAMPLE_FILES']
+__all__ = [
+    "TokenUsage",
+    "add_to_tool_duration",
+    "add_to_total_cost_state",
+    "add_to_total_lines_changed",
+    "clear_registered_hooks",
+    "current_working_directory",
+    "feature_enabled",
+    "get_registered_hooks",
+    "get_session_id",
+    "get_total_cost_usd",
+    "hook_registry",
+    "plan_mode",
+    "per_model_tokens",
+    "register_hook_callbacks",
+    "regenerate_session_id",
+    "reset_cost_state",
+    "session_id",
+    "total_cost_usd",
+]

@@ -255,7 +255,7 @@ class TestBuiltinCommands(unittest.TestCase):
         from src.skills.create import create_skill
 
         # Create a skill in the temp directory
-        project_skills_dir = Path(self.tmpdir.name) / ".clawd" / "skills"
+        project_skills_dir = Path(self.tmpdir.name) / ".geneva" / "skills"
         project_skills_dir.mkdir(parents=True)
 
         create_skill(
@@ -281,7 +281,7 @@ class TestBuiltinCommands(unittest.TestCase):
         self.assertIn("test-project-skill", result)
 
 
-class TestCommandEngine(unittest.TestCase):
+class TestCommandEngine(unittest.IsolatedAsyncioTestCase):
     """Tests for the command engine."""
 
     def setUp(self):
@@ -367,7 +367,7 @@ class TestSkillsIntegration(unittest.TestCase):
         self.assertEqual(cmd.markdown_content, "Hello $name")
 
 
-class TestInitCommand(unittest.TestCase):
+class TestInitCommand(unittest.IsolatedAsyncioTestCase):
     """Tests for the /init command implementation."""
 
     def setUp(self):

@@ -1,10 +1,11 @@
-"""LLM Providers for Clawd Codex."""
+"""LLM Providers for Geneva."""
 
 from __future__ import annotations
 
 from typing import TypedDict
 
 from .base import BaseProvider, ChatMessage, ChatResponse
+from .openrouter_provider import OpenRouterProvider
 
 
 # Provider metadata for login/UI
@@ -106,6 +107,15 @@ PROVIDER_INFO: dict[str, ProviderInfo] = {
             "MiniMax-M2",
         ],
     },
+    "openrouter": {
+        "label": "OpenRouter",
+        "default_base_url": "https://openrouter.ai/api/v1",
+        "default_model": "deepseek/deepseek-v4-flash",
+        "available_models": [
+            "deepseek/deepseek-v4-flash",
+            "openrouter/free",
+        ],
+    },
 }
 
 
@@ -134,6 +144,10 @@ def get_provider_class(provider_name: str):
         from .minimax_provider import MinimaxProvider
 
         return MinimaxProvider
+    if provider_name == "openrouter":
+        from .openrouter_provider import OpenRouterProvider
+
+        return OpenRouterProvider
     raise ValueError(f"Unknown provider: {provider_name}")
 
 
@@ -145,6 +159,7 @@ __all__ = [
     "BaseProvider",
     "ChatMessage",
     "ChatResponse",
+    "OpenRouterProvider",
     "get_provider_class",
     "get_provider_info",
     "PROVIDER_INFO",

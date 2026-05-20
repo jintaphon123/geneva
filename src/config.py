@@ -1,4 +1,4 @@
-"""Configuration management for Clawd Codex."""
+"""Configuration management for Geneva."""
 
 from __future__ import annotations
 
@@ -11,7 +11,7 @@ from typing import Any, Optional
 
 def get_config_path() -> Path:
     """Get the path to the configuration file."""
-    config_dir = Path.home() / ".clawd"
+    config_dir = Path.home() / ".geneva"
     config_dir.mkdir(parents=True, exist_ok=True)
     return config_dir / "config.json"
 
@@ -120,7 +120,7 @@ def get_provider_config(provider: str) -> dict[str, Any]:
     """Get configuration for a specific provider.
 
     Args:
-        provider: Provider name (anthropic, openai, glm, minimax)
+        provider: Provider name (anthropic, openai, glm, minimax, openrouter)
 
     Returns:
         Provider configuration dictionary
@@ -129,7 +129,17 @@ def get_provider_config(provider: str) -> dict[str, Any]:
     providers = config.get("providers", {})
 
     if provider not in providers:
-        raise ValueError(f"Unknown provider: {provider}")
+        from src.providers import PROVIDER_INFO
+
+        if provider not in PROVIDER_INFO:
+            raise ValueError(f"Unknown provider: {provider}")
+        providers[provider] = {
+            "api_key": "",
+            "base_url": PROVIDER_INFO[provider]["default_base_url"],
+            "default_model": PROVIDER_INFO[provider]["default_model"],
+        }
+        config["providers"] = providers
+        save_config(config)
 
     return providers[provider]
 
@@ -139,7 +149,7 @@ def set_api_key(provider: str, api_key: str, base_url: Optional[str] = None,
     """Set API key for a provider.
 
     Args:
-        provider: Provider name (anthropic, openai, glm, minimax)
+        provider: Provider name (anthropic, openai, glm, minimax, openrouter)
         api_key: API key to set
         base_url: Optional base URL override
         default_model: Optional default model override

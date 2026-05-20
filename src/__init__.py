@@ -1,7 +1,7 @@
-"""Clawd Codex - Claude Code Python Implementation."""
+"""Geneva local agent harness."""
 
 __version__ = "0.1.0"
-__author__ = "Clawd Codex Team"
+__author__ = "Geneva Team"
 
 from .config import load_config, get_provider_config
 

@@ -3,7 +3,11 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Iterable, Mapping, Protocol
 
+from src.permissions import ToolPermissionContext as RootToolPermissionContext
+from src.tool_system.profiles import get_manifest_entry
+
 from .context import ToolContext
+from .errors import ToolPermissionError
 from .permission_handler import PermissionResult
 from .protocol import ToolCall, ToolResult
 from .schema_validation import validate_json_schema
@@ -19,6 +23,8 @@ class ToolSpec:
     is_destructive: bool = False
     strict: bool = False
     max_result_size_chars: int = 20_000
+    timeout_seconds: float = 90.0
+    is_concurrency_safe: bool = False
 
 
 class Tool(Protocol):
@@ -68,17 +74,67 @@ class ToolRegistry:
     def get(self, name: str) -> Tool | None:
         return self._by_name.get(name.lower())
 
-    def dispatch(self, call: ToolCall, context: ToolContext) -> ToolResult:
+    def spec_for(self, name: str) -> ToolSpec | None:
+        tool = self.get(name)
+        return tool.spec() if tool is not None else None
+
+    def dispatch(
+        self,
+        call: ToolCall,
+        context: ToolContext,
+        permission_ctx: RootToolPermissionContext | None = None,
+    ) -> ToolResult:
         tool = self.get(call.name)
         if tool is None:
+            try:
+                from src.geneva.audit_log import append_audit_entry
+
+                append_audit_entry(
+                    tool_name=call.name,
+                    scope="unregistered",
+                    args=call.input,
+                    outcome="deny",
+                    reason="unknown tool (deny-by-default)",
+                    session_id=getattr(context, "session_id", None),
+                    turn_id=getattr(context, "turn_id", None),
+                )
+            except Exception:
+                pass
             return ToolResult(
                 name=call.name,
-                output={"error": f"unknown tool: {call.name}"},
+                output={"error": f"unknown tool: {call.name}", "policy": "deny-by-default"},
                 is_error=True,
                 tool_use_id=call.tool_use_id,
             )
         spec = tool.spec()
+        # R4.3 deny-by-default: tool must be in permission manifest
+        _manifest = get_manifest_entry(spec.name)
+        if _manifest is None:
+            try:
+                from src.geneva.audit_log import append_audit_entry
+
+                append_audit_entry(
+                    tool_name=spec.name,
+                    scope="unregistered",
+                    args=call.input,
+                    outcome="deny",
+                    reason="tool not in permission manifest (deny-by-default)",
+                    session_id=getattr(context, "session_id", None),
+                    turn_id=getattr(context, "turn_id", None),
+                )
+            except Exception:
+                pass
+            return ToolResult(
+                name=call.name,
+                output={"error": f"tool '{call.name}' is not registered in the permission manifest", "policy": "deny-by-default"},
+                is_error=True,
+                tool_use_id=call.tool_use_id,
+            )
         context.ensure_tool_allowed(spec.name)
+        if permission_ctx and permission_ctx.blocks(spec.name):
+            raise ToolPermissionError(
+                f"Tool '{spec.name}' is blocked by permission policy"
+            )
         validate_json_schema(call.input, spec.input_schema, root_name=spec.name)
 
         # Check permissions before running
@@ -109,7 +165,11 @@ class ToolRegistry:
             if not allowed:
                 return ToolResult(
                     name=spec.name,
-                    output={"error": "permission denied by user"},
+                    output={
+                        "error": f"permission denied: {permission_result.message or 'user approval required'}",
+                        "permission_required": True,
+                        "suggestion": permission_result.suggestion,
+                    },
                     is_error=True,
                     tool_use_id=call.tool_use_id,
                 )
@@ -121,7 +181,51 @@ class ToolRegistry:
                     tool_use_id=call.tool_use_id,
                 )
 
-        result = tool.run(call.input, context)
+        _m = get_manifest_entry(spec.name)
+        try:
+            from src.geneva.audit_log import append_audit_entry
+
+            append_audit_entry(
+                tool_name=spec.name,
+                scope=_m.category if _m else "unknown",
+                args=call.input,
+                outcome="start",
+                session_id=getattr(context, "session_id", None),
+                turn_id=getattr(context, "turn_id", None),
+            )
+        except Exception:
+            pass
+        try:
+            result = tool.run(call.input, context)
+        except Exception:
+            try:
+                from src.geneva.audit_log import append_audit_entry
+
+                append_audit_entry(
+                    tool_name=spec.name,
+                    scope=_m.category if _m else "unknown",
+                    args=call.input,
+                    outcome="error",
+                    reason="tool raised before returning ToolResult",
+                    session_id=getattr(context, "session_id", None),
+                    turn_id=getattr(context, "turn_id", None),
+                )
+            except Exception:
+                pass
+            raise
+        try:
+            from src.geneva.audit_log import append_audit_entry
+
+            append_audit_entry(
+                tool_name=spec.name,
+                scope=_m.category if _m else "unknown",
+                args=call.input,
+                outcome="error" if result.is_error else "allow",
+                session_id=getattr(context, "session_id", None),
+                turn_id=getattr(context, "turn_id", None),
+            )
+        except Exception:
+            pass
         if result.tool_use_id is None and call.tool_use_id is not None:
             return ToolResult(
                 name=result.name,
@@ -131,4 +235,3 @@ class ToolRegistry:
                 content_type=result.content_type,
             )
         return result
-

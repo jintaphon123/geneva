@@ -4,8 +4,8 @@ from pathlib import Path
 
 from .models import ClaudeMdContext, ClaudeMdFile
 
-_PROJECT_CANDIDATES = ("CLAUDE.md", ".clawd/CLAUDE.md", ".claude/CLAUDE.md")
-_USER_CANDIDATES = (".clawd/CLAUDE.md", ".claude/CLAUDE.md")
+_PROJECT_CANDIDATES = ("CLAUDE.md", ".geneva/CLAUDE.md", ".claude/CLAUDE.md")
+_USER_CANDIDATES = (".geneva/CLAUDE.md", ".claude/CLAUDE.md")
 
 
 def load_claude_md_context(

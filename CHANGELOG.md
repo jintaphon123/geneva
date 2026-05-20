@@ -1,146 +1,63 @@
 # Changelog
 
-All notable changes to this project will be documented in this file.
+All notable changes to Geneva are documented here.
 
-The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
-and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
-
-## [Unreleased]
-
-### Added
-- Initial context injection pipeline for workspace snapshot, git status, and `CLAUDE.md`
-- Tests covering the new context system integration
-
-### Changed
-- Skill frontmatter parsing now supports inline list syntax such as `arguments: [path]`
-- README and contributor docs now prefer `uv`-based setup instructions
-- Documentation now distinguishes provider-level streaming interfaces from the current turn-based CLI output
-
-## [0.1.0] - 2026-04-01
-
-### Added
-
-#### Core Features
-- Multi-provider support for Anthropic, OpenAI, and GLM (Zhipu AI)
-- Interactive REPL with prompt-toolkit integration
-- Rich interactive terminal output
-- Session persistence and management
-- Configuration management with basic API key obfuscation
-
-#### CLI Commands
-- `clawd` - Start the interactive REPL
-- `clawd login` - Interactive API key configuration
-- `clawd config` - View current configuration
-- `clawd --version` - Show version information
-
-#### Provider Implementations
-- **Anthropic Provider**: Claude integration with chat + streaming interfaces
-- **OpenAI Provider**: GPT integration with chat + streaming interfaces
-- **GLM Provider**: GLM integration with chat + streaming interfaces
-
-#### REPL Features
-- Command history with persistent storage
-- Auto-suggestions from history
-- Slash commands: `/help`, `/exit`, `/clear`, `/save`, `/load`, `/multiline`
-- Skill slash commands backed by `SKILL.md`
-- Syntax highlighting with Rich library
-- Tab completion and multi-line input support
-
-#### Configuration System
-- JSON-based configuration storage
-- Base64-encoded API keys for basic obfuscation
-- Provider-specific settings (API key, base URL, default model)
-- Session auto-save option
-
-#### Session Management
-- Unique session ID generation
-- Conversation history tracking
-- Session save/load functionality
-- Conversation clear operation
-
-#### Code Quality
-- Type hints for all public functions
-- Abstract base class for provider implementations
-- Data classes for structured data (ChatMessage, ChatResponse)
-- Error handling and validation
-
-#### Testing
-- Unit tests for core components
-- Integration tests for providers
-- End-to-end tests for REPL functionality
-- Test coverage for configuration management
-
-### Technical Details
-
-#### Architecture
-- Modular provider system with base abstraction
-- Conversation management with message history
-- Configuration management layer
-- REPL engine with prompt-toolkit
-
-#### Dependencies
-- `anthropic>=0.18.0` - Anthropic SDK
-- `openai>=1.0.0` - OpenAI SDK
-- `zhipuai>=2.0.0` - Zhipu AI SDK
-- `prompt-toolkit>=3.0.0` - Interactive REPL
-- `rich>=13.0.0` - Terminal formatting
-- `python-dotenv>=1.0.0` - Environment variables
-
-#### File Structure
-```
-src/
-├── providers/          # LLM provider implementations
-│   ├── base.py        # Abstract base class
-│   ├── anthropic_provider.py
-│   ├── openai_provider.py
-│   └── glm_provider.py
-├── repl/              # Interactive REPL
-│   └── core.py
-├── agent/             # Session management
-│   ├── session.py
-│   └── conversation.py
-├── config.py          # Configuration management
-└── cli.py             # CLI commands
-```
-
-### Known Limitations
-
-- Context building is still in early MVP form and needs deeper project summarization
-- Permission enforcement exists as a framework but is not fully integrated everywhere
-- `/resume`, `/compact`, and `/doctor` are not implemented yet
-- The current CLI uses turn-based output even though providers expose streaming interfaces
-
-### Migration Notes
-
-This is the initial MVP release. No migration needed.
-
-### Future Roadmap
-
-- [ ] Context enrichment and project-memory improvements
-- [ ] Full permission integration
-- [ ] `/resume`, `/compact`, `/doctor`
-- [ ] Token usage and cost tracking
-- [ ] MCP and plugin-system enhancements
+Format: [Semantic Versioning](https://semver.org) — `MAJOR.MINOR.PATCH`
 
 ---
 
-## Release Notes
+## [0.1.0] — 2026-05-20
 
-### v0.1.0 - MVP Release
+Initial open source release of Geneva Layer 0.
 
-This is the first public release of Clawd Codex, a complete reimplementation of Claude Code. This MVP includes:
+### Core runtime
+- Interactive REPL (`geneva`) with streaming responses and slash commands
+- FastAPI web server (`src/geneva/web_server.py`) serving local React UI
+- Session management with compaction, title generation, and history
 
-- Full multi-provider support
-- Interactive REPL
-- Session management
-- Configuration system
-- Tool system and agent loop foundations
-- Type-safe implementation
+### Memory system
+- SQLite FTS5 memory store with `ADD`, `SUPERSEDE`, `ARCHIVE` operations
+- Temporal schema — memories carry confidence, scope, and source metadata
+- Auto-dream consolidation service — background memory distillation after sessions
+- Memory write review with conflict detection and user-approval gate
+- Context disclosure strip — per-turn summary of what memory was injected
 
-The focus was on building a solid foundation with clean architecture, comprehensive testing, and good developer experience. All core features are working and tested.
+### Projects
+- Project workspace with scoped sources (text, markdown, URL, PDF, DOCX)
+- Research engine — multi-source deep research with durable `research_runs` and report artifacts
+- Full-brain search across chats, projects, memories, sources, research reports
 
-**Special Thanks**: This project is inspired by Claude Code and aims to provide an open-source alternative for learning and experimentation.
+### Skills & plugins
+- Markdown skill loader from `.geneva/skills/`, project `.geneva/skills/`, and system paths
+- Plugin CRUD API with safety-status tracking
+- Skill browser UI with live status, triggers, and one-click invocation
+
+### Tools
+- Code runner (Python, JavaScript, shell)
+- Web fetch with trust-policy enforcement (`[UNTRUSTED SOURCE]` prefix)
+- File I/O with path traversal protection
+- Computer use adapter (Playwright) with safety gates
+- MCP connector runtime (Google, Notion, GitHub adapters)
+
+### Web UI (React/Vite/TypeScript)
+- Chat canvas with streaming, artifacts panel, and research progress rail
+- Cmd/Ctrl+K global search with grouped results and slash command center
+- Project workspace view — sources tab, artifacts, research, skills, activity
+- Memory browser — search, add, review conflicts, session memory timeline
+- Settings — provider/model picker, API key management, CLI bridges, skill builder
+- Responsive layout — mobile project bottom sheet, sidebar collapse
+
+### Security & hardening
+- Path traversal protection on all file-reading tools
+- Atomic file writes with temp-file rename
+- HTTP boundary enforcement on web server
+- UUID race condition fix in session creation
+- `assert` → `raise` migration in production paths
+
+### Test suite
+- 606 tests, 16 skipped, 0 failures
+- Coverage: memory ops, research engine, tool system, provider adapters, web API, computer use, MCP, skills
 
 ---
 
-[0.1.0]: https://github.com/GPT-AGI/Clawd-Code/releases/tag/v0.1.0
+[0.1.0]: https://github.com/jintaphonteosuwan/geneva/releases/tag/v0.1.0

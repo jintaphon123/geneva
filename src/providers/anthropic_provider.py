@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Generator, Optional, Any
+from typing import Callable, Generator, Optional, Any
 
 try:
     import anthropic  # type: ignore
@@ -15,6 +15,8 @@ except ModuleNotFoundError:  # pragma: no cover
                 )
 
     anthropic = _MissingAnthropic()
+
+from src.services.model_normalizer import repair_tool_call_json as _repair_tool_json
 
 from .base import BaseProvider, ChatResponse, MessageInput, TextChunkCallback
 
@@ -159,9 +161,10 @@ class AnthropicProvider(BaseProvider):
         messages: list[MessageInput],
         tools: Optional[list[dict[str, Any]]] = None,
         on_text_chunk: TextChunkCallback | None = None,
+        on_tool_ready: Callable[[dict], None] | None = None,
         **kwargs
     ) -> ChatResponse:
-        """Stream Anthropic text chunks and return the final structured response."""
+        """Stream Anthropic events and return the final structured response."""
         model = self._get_model(**kwargs)
         max_tokens = kwargs.get("max_tokens", 4096)
         system = kwargs.pop("system", None)
@@ -173,6 +176,9 @@ class AnthropicProvider(BaseProvider):
             extra_kwargs["tools"] = tools
 
         streamed_text = ""
+        current_tool_id: str | None = None
+        current_tool_name: str | None = None
+        current_tool_json = ""
         with client.messages.stream(
             model=model,
             max_tokens=max_tokens,
@@ -181,19 +187,75 @@ class AnthropicProvider(BaseProvider):
             **extra_kwargs,
             **{k: v for k, v in kwargs.items() if k not in ["model", "max_tokens", "tools"]},
         ) as stream:
-            for text in stream.text_stream:
-                if not text:
+            for event in stream:
+                event_type = str(getattr(event, "type", ""))
+                event_class = event.__class__.__name__
+                is_block_start = (
+                    event_type == "content_block_start"
+                    or "ContentBlockStart" in event_class
+                )
+                is_block_stop = (
+                    event_type == "content_block_stop"
+                    or "ContentBlockStop" in event_class
+                )
+
+                block = getattr(event, "content_block", None)
+                if block is None:
+                    block = getattr(event, "block", None)
+                if is_block_start and getattr(block, "type", None) == "tool_use":
+                    current_tool_id = str(getattr(block, "id", "") or "")
+                    current_tool_name = str(getattr(block, "name", "") or "")
+                    current_tool_json = ""
+
+                delta = getattr(event, "delta", None)
+                delta_type = getattr(delta, "type", None) if delta is not None else None
+                if delta is not None and (
+                    delta_type == "input_json_delta"
+                    or hasattr(delta, "partial_json")
+                ):
+                    partial_json = getattr(delta, "partial_json", "")
+                    if partial_json:
+                        current_tool_json += str(partial_json)
                     continue
-                streamed_text += text
-                if on_text_chunk is not None:
-                    on_text_chunk(text)
+
+                text = None
+                if delta_type == "text_delta":
+                    text = getattr(delta, "text", None)
+                elif delta is not None and hasattr(delta, "text"):
+                    text = getattr(delta, "text", None)
+                elif hasattr(event, "text"):
+                    text = getattr(event, "text", None)
+
+                if text:
+                    text_piece = str(text)
+                    streamed_text += text_piece
+                    if on_text_chunk is not None:
+                        on_text_chunk(text_piece)
+
+                if is_block_stop and current_tool_id:
+                    try:
+                        if on_tool_ready is not None:
+                            on_tool_ready({
+                                "id": current_tool_id,
+                                "name": current_tool_name or "",
+                                "input": _repair_tool_json(current_tool_json) or {},
+                            })
+                    except Exception:
+                        pass
+                    finally:
+                        current_tool_id = None
+                        current_tool_name = None
+                        current_tool_json = ""
             try:
                 final_message = stream.get_final_message()
             except Exception:
                 final_message = None
 
         if final_message is not None:
-            return self._build_chat_response(final_message)
+            response = self._build_chat_response(final_message)
+            if on_text_chunk is not None and not streamed_text and response.content:
+                on_text_chunk(response.content)
+            return response
 
         return ChatResponse(
             content=streamed_text,

@@ -26,6 +26,7 @@ class ToolSearchTool:
                 "required": ["query"],
             },
             is_read_only=True,
+            is_concurrency_safe=True,
             max_result_size_chars=100_000,
             strict=True,
         )

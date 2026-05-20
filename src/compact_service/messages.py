@@ -24,6 +24,7 @@ class CompactBoundaryMetadata:
     pre_compact_discovered_tools: list[str] = field(default_factory=list)
     messages_summarized: int = 0
     user_context: Optional[str] = None
+    context_ledger_id: Optional[str] = None
 
 
 def create_compact_boundary_message(
@@ -33,6 +34,7 @@ def create_compact_boundary_message(
     user_context: Optional[str] = None,
     messages_summarized: int = 0,
     discovered_tools: Optional[list[str]] = None,
+    context_ledger_id: Optional[str] = None,
 ) -> Message:
     """
     Create a compact boundary marker message.
@@ -47,6 +49,7 @@ def create_compact_boundary_message(
         user_context=user_context,
         messages_summarized=messages_summarized,
         pre_compact_discovered_tools=discovered_tools or [],
+        context_ledger_id=context_ledger_id,
     )
     content = TextContentBlock(
         type="text",
@@ -74,6 +77,8 @@ def _serialize_metadata(m: CompactBoundaryMetadata) -> str:
         parts.append(f"last_uuid={m.last_message_uuid[:8]}")
     if m.messages_summarized:
         parts.append(f"summarized={m.messages_summarized}")
+    if m.context_ledger_id:
+        parts.append(f"ledger={m.context_ledger_id[:12]}")
     return "; ".join(parts)
 
 

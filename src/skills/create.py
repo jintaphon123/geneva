@@ -28,6 +28,7 @@ def create_skill(
     skill_file = skill_dir / "SKILL.md"
 
     fm: dict[str, Any] = {
+        "name": name,
         "description": description,
         "user-invocable": user_invocable,
         "disable-model-invocation": disable_model_invocation,

@@ -95,6 +95,7 @@ class BaseProvider(ABC):
         messages: list[MessageInput],
         tools: Optional[list[dict[str, Any]]] = None,
         on_text_chunk: TextChunkCallback | None = None,
+        on_tool_ready: Callable[[dict], None] | None = None,
         **kwargs
     ) -> ChatResponse:
         """Stream a response while also returning the final structured ChatResponse.

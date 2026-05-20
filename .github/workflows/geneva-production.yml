@@ -1,0 +1,55 @@
+name: Geneva Production Gate
+
+on:
+  push:
+    branches: ["main", "master"]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  production-gate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: "npm"
+          cache-dependency-path: geneva-ui/package-lock.json
+
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
+
+      - name: Install frontend dependencies
+        working-directory: geneva-ui
+        run: npm ci
+
+      - name: Run production QA gate
+        working-directory: geneva-ui
+        env:
+          PYTHON: python
+          CHROME_BIN: /usr/bin/google-chrome
+        run: npm run qa:production
+
+      - name: Upload QA artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: geneva-production-qa
+          if-no-files-found: warn
+          path: |
+            geneva-ui/test-results/production-qa
+            geneva-ui/test-results/visual-smoke

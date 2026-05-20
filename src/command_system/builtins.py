@@ -1,5 +1,5 @@
 """
-Built-in commands for Clawd Code.
+Built-in commands for Geneva.
 
 Implements core commands like /help, /clear, /exit, /skills, etc.
 """
@@ -25,18 +25,19 @@ from ..setup import run_setup
 from .engine import CommandContext, CommandResult, LocalCommandResult
 from .registry import CommandRegistry, get_command_registry, list_commands
 from .types import Command, CommandType, CompactionResult, LocalCommand, PromptCommand
+from ..utils.asyncio_tools import run_awaitable_sync
 
 
-# Official Claude Code /init prompts (Simplified)
-NEW_INIT_PROMPT = """Set up a CLAUDE.md file for this repo. CLAUDE.md is loaded into every Claude Code session, so it must be concise — only include what Claude would get wrong without it.
+# Geneva /init prompts
+NEW_INIT_PROMPT = """Set up an AGENT.md file for this repo. AGENT.md is loaded into every Geneva session, so it must be concise — only include what the AI would get wrong without it.
 
 ## Step 1: Ask what to set up
 
 Use AskUserQuestion to ask the user:
-- "Which CLAUDE.md files should /init set up?" with options: "Project CLAUDE.md" | "Personal CLAUDE.local.md" | "Both project + personal"
+- "Which AGENT.md files should /init set up?" with options: "Project AGENT.md" | "Personal AGENT.local.md" | "Both project + personal"
 
 Use AskUserQuestion to ask:
-- "Also set up skills and hooks?" with options: "Skills + hooks" | "Skills only" | "Hooks only" | "Neither, just CLAUDE.md"
+- "Also set up skills and hooks?" with options: "Skills + hooks" | "Skills only" | "Hooks only" | "Neither, just AGENT.md"
 
 ## Step 2: Explore the codebase
 
@@ -53,9 +54,9 @@ Use AskUserQuestion to ask only things you CAN'T figure out from code:
 - Non-obvious workflows or commands
 - Communication preferences (terse vs detailed)
 
-## Step 4: Write CLAUDE.md
+## Step 4: Write AGENT.md
 
-Write a minimal CLAUDE.md at the project root.
+Write a minimal AGENT.md at the project root.
 
 Include:
 - Build/test/lint commands that aren't standard (e.g., "uv run pytest" not just "pytest")
@@ -70,16 +71,16 @@ Exclude:
 
 Prefix with:
 ```
-# CLAUDE.md
+# AGENT.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+This file provides guidance to Geneva when working with code in this repository.
 ```
 
-If CLAUDE.md exists: read it, propose specific improvements.
+If AGENT.md exists: read it, propose specific improvements.
 
-## Step 5: Write CLAUDE.local.md (if user chose personal or both)
+## Step 5: Write AGENT.local.md (if user chose personal or both)
 
-Write CLAUDE.local.md at project root. Add it to .gitignore.
+Write AGENT.local.md at project root. Add it to .gitignore.
 
 Include:
 - User's role and familiarity with codebase
@@ -88,7 +89,7 @@ Include:
 
 ## Step 6: Create skills (if user chose skills)
 
-Create skills at `.claude/skills/<name>/SKILL.md`:
+Create skills at `.geneva/skills/<name>/SKILL.md`:
 ```yaml
 ---
 name: <skill-name>
@@ -103,15 +104,15 @@ description: <what it does>
 Tell the user what was set up and suggest any additional optimizations."""
 
 # Fallback prompt for simpler initialization
-OLD_INIT_PROMPT = """Please analyze this codebase and create a CLAUDE.md file, which will be given to future instances of Claude Code to operate in this repository.
+OLD_INIT_PROMPT = """Please analyze this codebase and create an AGENT.md file, which will be given to future Geneva sessions to operate in this repository.
 
 What to add:
 1. Commands that will be commonly used, such as how to build, lint, and run tests. Include the necessary commands to develop in this codebase, such as how to run a single test.
 2. High-level code architecture and structure so that future instances can be productive more quickly. Focus on the "big picture" architecture that requires reading multiple files to understand.
 
 Usage notes:
-- If there's already a CLAUDE.md, suggest improvements to it.
-- When you make the initial CLAUDE.md, do not repeat yourself and do not include obvious instructions like "Provide helpful error messages to users", "Write unit tests for all new utilities", "Never include sensitive information (API keys, tokens) in code or commits".
+- If there's already an AGENT.md, suggest improvements to it.
+- When you make the initial AGENT.md, do not repeat yourself and do not include obvious instructions like "Provide helpful error messages to users", "Write unit tests for all new utilities", "Never include sensitive information (API keys, tokens) in code or commits".
 - Avoid listing every component or file structure that can be easily discovered.
 - Don't include generic development practices.
 - If there are Cursor rules (in .cursor/rules/ or .cursorrules) or Copilot rules (in .github/copilot-instructions.md), make sure to include the important parts.
@@ -120,9 +121,9 @@ Usage notes:
 - Be sure to prefix the file with the following text:
 
 ```
-# CLAUDE.md
+# AGENT.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+This file provides guidance to Geneva when working with code in this repository.
 ```"""
 
 
@@ -207,7 +208,7 @@ def skills_command_call(args: str, context: CommandContext) -> LocalCommandResul
     if not skills:
         return LocalCommandResult(
             type="text",
-            value="No skills available. Add skills to ~/.clawd/skills/ or ./.clawd/skills/.",
+            value="No skills available. Add skills to ~/.geneva/skills/ or ./.geneva/skills/.",
         )
 
     lines = ["Available skills:", ""]
@@ -404,6 +405,7 @@ async def _compact_async(args: str, context: CommandContext) -> LocalCommandResu
             model=model,
             custom_instructions=custom_instructions,
             trigger="manual",
+            session_id=context.config.get("session_id"),
         )
         return LocalCommandResult(
             type="compact",
@@ -445,9 +447,8 @@ def compact_command_call(args: str, context: CommandContext) -> LocalCommandResu
         # Fall back to sync path
         return _sync_compact_fallback(context)
     except RuntimeError:
-        # No running event loop — safe to use asyncio.run
         try:
-            return asyncio.run(_compact_async(args, context))
+            return run_awaitable_sync(_compact_async(args, context))
         except Exception as e:
             import traceback
             traceback.print_exc()

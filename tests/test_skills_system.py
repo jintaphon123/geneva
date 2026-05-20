@@ -9,6 +9,7 @@ from unittest.mock import patch
 from src.skills.create import create_skill
 from src.skills.frontmatter import parse_frontmatter
 from src.skills.loader import clear_skill_registry, get_all_skills
+from src.geneva.skill_engine import SkillEngine
 from src.tool_system.context import ToolContext
 from src.tool_system.tools import SkillTool
 
@@ -61,12 +62,44 @@ class TestSkillRegister(SkillSystemTests):
             description="say hello",
             body="Hello",
         )
-        with patch.dict(os.environ, {"CLAWD_SKILLS_DIR": str(skills_dir)}):
+        with patch.dict(os.environ, {"GENEVA_SKILLS_DIR": str(skills_dir)}):
             skills = get_all_skills(project_root=self.root)
             by_name = {s.name: s for s in skills}
             self.assertIn("hello", by_name)
             self.assertEqual(by_name["hello"].description, "say hello")
             self.assertEqual(by_name["hello"].loaded_from, "user")
+
+    def test_register_loads_only_active_geneva_managed_skills(self) -> None:
+        user_dir = self.root / "user-skills"
+        user_dir.mkdir()
+        managed_dir = self.root / "geneva-skills"
+        engine = SkillEngine(managed_dir)
+        engine.create_skill_record(
+            "managed-active",
+            _skill_markdown("managed-active", "Active managed skill"),
+            status="active",
+            source="manual",
+        )
+        engine.create_skill_record(
+            "managed-review",
+            _skill_markdown("managed-review", "Review managed skill"),
+            status="review",
+            source="generated",
+        )
+
+        with patch.dict(
+            os.environ,
+            {
+                "GENEVA_SKILLS_DIR": str(user_dir),
+                "CLAUDE_SKILLS_DIR": str(user_dir),
+                "GENEVA_MANAGED_SKILLS_DIR": str(managed_dir),
+            },
+        ):
+            by_name = {skill.name: skill for skill in get_all_skills(project_root=self.root)}
+
+        self.assertIn("managed-active", by_name)
+        self.assertEqual(by_name["managed-active"].loaded_from, "managed")
+        self.assertNotIn("managed-review", by_name)
 
 
 class TestSkillUse(SkillSystemTests):
@@ -80,8 +113,12 @@ class TestSkillUse(SkillSystemTests):
             body="Hello $name ($0) / $ARGUMENTS",
         )
         ctx = ToolContext(workspace_root=self.root)
-        with patch.dict(os.environ, {"CLAWD_SKILLS_DIR": str(skills_dir)}):
+        with patch.dict(os.environ, {"GENEVA_SKILLS_DIR": str(skills_dir)}):
             out = SkillTool().run({"skill": "hello", "args": 'bob "the builder"'}, ctx).output
             self.assertTrue(out["success"])
             self.assertIn("Hello bob (bob)", out["prompt"])
             self.assertIn('bob "the builder"', out["prompt"])
+
+
+def _skill_markdown(name: str, description: str) -> str:
+    return f"---\nname: {name}\ndescription: {description}\n---\n\n# {name}\n\nUse it carefully.\n"

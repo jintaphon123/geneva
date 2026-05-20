@@ -10,8 +10,8 @@ dist/
 downloads/
 eggs/
 .eggs/
-lib/
-lib64/
+/lib/
+/lib64/
 parts/
 sdist/
 var/
@@ -47,6 +47,13 @@ env/
 htmlcov/
 .tox/
 .nox/
+test-results/
+geneva-ui/test-results/
+.qa-cache/
+
+# Frontend dependencies
+node_modules/
+geneva-ui/node_modules/
 
 # MyPy
 .mypy_cache/
@@ -71,7 +78,7 @@ secrets.json
 credentials.json
 .secrets/
 
-# Claude Code specific
+# Agent compatibility files
 .claude/
 CLAUDE.md
 
@@ -80,5 +87,5 @@ sessions/
 .transcripts/
 .port_sessions/
 
-# Claude Code personal settings
+# Agent compatibility personal settings
 CLAUDE.local.md

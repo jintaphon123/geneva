@@ -1,7 +1,7 @@
 """
-Command type system for Clawd Code.
+Command type system for Geneva.
 
-Implements the core command types inspired by Claude Code's command system:
+Implements the core command types for the Geneva command system:
 - PromptCommand: Expands to text/prompt content sent to the model
 - LocalCommand: Executes local code without rendering UI
 """

@@ -49,5 +49,5 @@ class MCPTool:
             return ToolResult(name="MCP", output={"error": f"mcp server not connected: {server}"}, is_error=True)
 
         out = client.call_tool(tool_name, args)
-        return ToolResult(name="MCP", output={"server": server, "tool": tool_name, "output": out})
+        return ToolResult(name="MCP", output={"server": server, "tool": tool_name, "untrusted": True, "source": "mcp", "output": out})
 

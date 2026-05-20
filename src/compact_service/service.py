@@ -13,10 +13,16 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass
 from datetime import datetime
+from pathlib import Path
 from typing import Any, Optional
 
 from ..agent.conversation import Conversation, Message
 from ..context_system.microcompact import microcompact_messages, strip_images_from_messages
+from ..services.compact.context_ledger import (
+    append_context_ledger_record,
+    build_compact_context_ledger,
+    new_context_ledger_id,
+)
 from ..providers.base import BaseProvider
 from .messages import (
     create_compact_boundary_message,
@@ -64,6 +70,7 @@ class CompactResult:
     summary_text: str
     trigger: str = "manual"
     user_display_message: Optional[str] = None
+    ledger_record: dict[str, Any] | None = None
 
 
 async def compact_conversation(
@@ -72,6 +79,9 @@ async def compact_conversation(
     model: str,
     custom_instructions: Optional[str] = None,
     trigger: str = "manual",
+    fresh_tail_messages: int = 6,
+    session_id: str | None = None,
+    ledger_dir: Path | None = None,
 ) -> CompactResult:
     """
     Compact a conversation by summarizing older messages.
@@ -81,7 +91,7 @@ async def compact_conversation(
     - Forked agent with cache sharing (no subprocess isolation in Python REPL)
     - Session memory (no disk-backed session memory extraction)
     - Reactive compact (no background compaction agent)
-    - Hook system (no pre/post compact hooks in Clawd-Code)
+    - Hook system (no pre/post compact hooks in Geneva)
 
     Args:
         conversation: The live Conversation object (mutated in place)
@@ -99,9 +109,16 @@ async def compact_conversation(
     if len(messages) < 2:
         raise ValueError("Not enough messages to compact.")
 
+    tail_count = min(max(0, fresh_tail_messages), max(0, len(messages) - 2))
+    messages_to_summarize = messages[:-tail_count] if tail_count else messages
+    fresh_tail = messages[-tail_count:] if tail_count else []
+
+    if len(messages_to_summarize) < 2:
+        raise ValueError("Not enough older messages to compact while preserving the fresh tail.")
+
     # Step 2: Count pre-compact tokens
     from ..token_estimation import count_messages_tokens
-    api_messages = conversation.get_messages()
+    api_messages = _messages_to_api(messages_to_summarize)
     pre_compact_tokens = count_messages_tokens(api_messages)
     pre_compact_count = len(conversation.messages)
 
@@ -118,8 +135,7 @@ async def compact_conversation(
     # System prompt + recent messages + summary request
     summary_request_messages: list[dict[str, Any]] = []
 
-    # Add the last N messages as context (after microcompact)
-    # Avoid sending too many old messages to stay within context limits
+    # Add the messages being replaced, not the protected fresh tail.
     context_messages = compacted_api[-20:] if len(compacted_api) > 20 else compacted_api
     for msg in context_messages:
         summary_request_messages.append(msg)
@@ -157,10 +173,12 @@ async def compact_conversation(
     if not summary_text:
         summary_text = _fallback_summary(messages)
 
+    ledger_id = new_context_ledger_id("compact")
+
     # Step 6: Create boundary marker
     last_msg_uuid = None
-    if messages:
-        last_msg = messages[-1]
+    if messages_to_summarize:
+        last_msg = messages_to_summarize[-1]
         if hasattr(last_msg, 'uuid'):
             last_msg_uuid = getattr(last_msg, 'uuid', None)
         elif isinstance(last_msg, dict):
@@ -170,10 +188,15 @@ async def compact_conversation(
         trigger=trigger,
         pre_compact_token_count=pre_compact_tokens,
         last_message_uuid=last_msg_uuid,
+        messages_summarized=len(messages_to_summarize),
+        context_ledger_id=ledger_id,
     )
 
     # Step 7: Create summary message
-    summary_msg = create_compact_summary_message(summary_text)
+    summary_msg = create_compact_summary_message(
+        summary_text,
+        summarize_metadata={"context_ledger_id": ledger_id},
+    )
 
     # Step 8: Insert boundary + summary into conversation
     # Find position after the last boundary marker
@@ -187,20 +210,43 @@ async def compact_conversation(
     else:
         insert_pos = 0
 
-    # Remove messages that were summarized (everything from insert_pos onward)
-    # Then insert boundary + summary
+    # Remove only the older messages being summarized. Keep the fresh tail verbatim
+    # so the model keeps immediate task state, recent user intent, and tool results.
     if insert_pos == 0:
-        # No existing boundary — clear all and start fresh
         conversation.messages.clear()
         conversation.messages.append(boundary_msg)
         conversation.messages.append(summary_msg)
+        conversation.messages.extend(fresh_tail)
     else:
-        # Keep messages before boundary, then boundary + summary
         conversation.messages = list(conversation.messages[:insert_pos])
         conversation.messages.append(boundary_msg)
         conversation.messages.append(summary_msg)
+        conversation.messages.extend(fresh_tail)
 
     post_compact_count = len(conversation.messages)
+    post_compact_tokens = count_messages_tokens(conversation.get_messages())
+    total_tokens_saved = max(0, pre_compact_tokens - post_compact_tokens)
+    fresh_tail_tokens = count_messages_tokens(_messages_to_api(fresh_tail)) if fresh_tail else 0
+    ledger_record = build_compact_context_ledger(
+        record_id=ledger_id,
+        session_id=session_id or "unknown",
+        model=model,
+        trigger=trigger,
+        pre_compact_tokens=pre_compact_tokens,
+        post_compact_tokens=post_compact_tokens,
+        messages_summarized=len(messages_to_summarize),
+        fresh_tail_count=len(fresh_tail),
+        fresh_tail_tokens=fresh_tail_tokens,
+        summary_text=summary_text,
+        microcompact_tokens_saved=tokens_saved,
+        total_tokens_saved=max(tokens_saved, total_tokens_saved),
+        summary_request_message_count=len(context_messages),
+    )
+    if session_id:
+        try:
+            append_context_ledger_record(ledger_record, ledger_dir=ledger_dir)
+        except Exception:
+            logger.exception("Failed to write compact context ledger")
 
     # Step 9: Build user display message
     saved_str = f"~{tokens_saved:,}" if tokens_saved > 0 else "some"
@@ -213,13 +259,20 @@ async def compact_conversation(
     return CompactResult(
         boundary_message=boundary_msg,
         summary_message=summary_msg,
-        tokens_saved=tokens_saved,
+        tokens_saved=max(tokens_saved, total_tokens_saved),
         pre_compact_count=pre_compact_count,
         post_compact_count=post_compact_count,
         summary_text=summary_text,
         trigger=trigger,
         user_display_message=user_display,
+        ledger_record=ledger_record.to_dict(),
     )
+
+
+def _messages_to_api(messages: list[Message]) -> list[dict[str, Any]]:
+    conversation = Conversation()
+    conversation.messages = list(messages)
+    return conversation.get_messages()
 
 
 def _fallback_summary(messages: list[Message]) -> str:
