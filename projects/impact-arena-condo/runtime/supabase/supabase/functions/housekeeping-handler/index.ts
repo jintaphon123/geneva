@@ -4,6 +4,7 @@ import {
   buildQueueFlexMessage,
   type QueuePage,
 } from "./cards.ts";
+import { handleAccessPrepTransition } from "./access_prep.ts";
 import { HousekeepingIntent, parseCommand } from "./commands.ts";
 import { claimHousekeepingTask, loadHousekeepingQueue } from "./queue.ts";
 import { handleStateTransition, TransitionResult } from "./state.ts";
@@ -12,6 +13,7 @@ type HandlerOptions = {
   getEnv?: (key: string) => string | undefined;
   createSupabase?: () => any;
   transition?: typeof handleStateTransition;
+  accessTransition?: typeof handleAccessPrepTransition;
 };
 
 const corsHeaders = {
@@ -57,9 +59,11 @@ export async function buildHousekeepingPostbackData(
   taskId: string,
   item: string | null,
   secret: string,
+  taskKind?: "cleaning" | "access_prep",
 ): Promise<string> {
   const params = new URLSearchParams({ action, task_id: taskId });
   if (item) params.set("item", item);
+  if (taskKind) params.set("task_kind", taskKind);
   const payload = params.toString();
   params.set("sig", await signPostbackPayload(payload, secret));
   return params.toString();
@@ -241,7 +245,7 @@ async function buildQuickReplies(
           type: "action",
           action: {
             type: "postback",
-            label: "รับทราบงาน",
+            label: "รับงาน",
             displayText: "รับทราบ",
             data: await postback("acknowledge_task"),
           },
@@ -524,10 +528,14 @@ async function fetchActiveHousekeeper(supabase: any, lineUserId: string) {
   return { data };
 }
 
-async function fetchTaskAndRoom(supabase: any, taskId?: string) {
+async function fetchTaskAndRoom(
+  supabase: any,
+  taskId?: string,
+  taskKind: "cleaning" | "access_prep" = "cleaning",
+) {
   if (!taskId) return { task: null, roomCode: "ไม่ระบุ" };
   const { data: task, error: taskError } = await supabase
-    .from("cleaning_tasks")
+    .from(taskKind === "access_prep" ? "access_prep_tasks" : "cleaning_tasks")
     .select("*")
     .eq("id", taskId)
     .maybeSingle();
@@ -676,6 +684,8 @@ function buildSuccessTexts(
 export function createHousekeepingHandler(options: HandlerOptions = {}) {
   const getEnv = options.getEnv || ((key: string) => Deno.env.get(key));
   const transition = options.transition || handleStateTransition;
+  const accessTransition = options.accessTransition ||
+    handleAccessPrepTransition;
   const createSupabaseClient = options.createSupabase ||
     (() => createDefaultSupabase(getEnv));
 
@@ -1248,23 +1258,116 @@ export function createHousekeepingHandler(options: HandlerOptions = {}) {
       // Extract taskId from command if it is a postback query string
       const postbackTaskId = postbackTaskIdFromText;
 
-      const transitionResult = await transition(
-        supabase,
-        line_user_id,
-        intent,
-        source_event_id,
-        postbackTaskId,
-      );
+      let isAccessTask = false;
+      let targetTaskId: string | null = postbackTaskId;
+
+      if (postbackTaskId !== null) {
+        isAccessTask = postbackTaskKindFromText === "access_prep";
+      } else {
+        const { data: focus } = await supabase
+          .from("housekeeper_task_focus")
+          .select(
+            "focus_type, focused_access_prep_task_id, focused_cleaning_task_id",
+          )
+          .eq("housekeeper_id", housekeeper.id)
+          .maybeSingle();
+
+        if (focus?.focus_type === "access_prep") {
+          isAccessTask = true;
+          targetTaskId = focus.focused_access_prep_task_id;
+        } else if (focus?.focus_type === "cleaning") {
+          isAccessTask = false;
+          targetTaskId = focus.focused_cleaning_task_id;
+        }
+      }
+
+      if (isAccessTask && !accessTransition) {
+        return jsonResponse({
+          ok: false,
+          error: "system_error",
+          message: "Access Prep service is not available",
+        }, 500);
+      }
+
+      const accessPayload = intent.action === "add_note"
+        ? { note: intent.note }
+        : intent.action === "report_problem"
+        ? { problem: intent.problem }
+        : {};
+
+      let transitionResult: TransitionResult;
+
+      transitionResult = (isAccessTask && targetTaskId)
+        ? (await accessTransition!(supabase, {
+          taskId: targetTaskId,
+          housekeeperId: housekeeper.id,
+          action: intent.action,
+          sourceEventId: source_event_id,
+          payload: accessPayload,
+        }) as TransitionResult)
+        : await transition(
+          supabase,
+          line_user_id,
+          intent,
+          source_event_id,
+          postbackTaskId,
+        );
+
+      if (transitionResult.ok) {
+        if (
+          isAccessTask &&
+          (transitionResult.action === "acknowledge_task" ||
+            transitionResult.action === "claimed" ||
+            transitionResult.action === "start_task")
+        ) {
+          const { error: focusError } = await supabase.from(
+            "housekeeper_task_focus",
+          ).upsert({
+            housekeeper_id: housekeeper.id,
+            focus_type: "access_prep",
+            focused_access_prep_task_id: targetTaskId ||
+              transitionResult.taskId,
+            focused_cleaning_task_id: null,
+            focused_field_assistance_task_id: null,
+          }, { onConflict: "housekeeper_id" });
+          if (focusError) console.error("Focus Update Error:", focusError);
+        } else if (isAccessTask && transitionResult.newState === "done") {
+          const { data: activeCleaning } = await supabase
+            .from("cleaning_tasks")
+            .select("id")
+            .eq("assigned_housekeeper_id", housekeeper.id)
+            .in("status", ["in_progress", "acknowledged", "sent"])
+            .limit(1)
+            .maybeSingle();
+
+          const { error: focusError } = await supabase.from(
+            "housekeeper_task_focus",
+          ).upsert({
+            housekeeper_id: housekeeper.id,
+            focus_type: activeCleaning ? "cleaning" : null,
+            focused_access_prep_task_id: null,
+            focused_cleaning_task_id: activeCleaning ? activeCleaning.id : null,
+            focused_field_assistance_task_id: null,
+          }, { onConflict: "housekeeper_id" });
+          if (focusError) console.error("Focus Update Error:", focusError);
+        }
+      }
 
       if (!transitionResult.ok) {
         if (transitionResult.error === "capability_denied") {
-          const details = await fetchFocusedTaskDetails(
+          const accessDetails = isAccessTask
+            ? await fetchTaskAndRoom(
+              supabase,
+              targetTaskId!,
+              "access_prep",
+            ).catch(() => ({ task: null, roomCode: "ไม่ระบุ" }))
+            : null;
+          const details = isAccessTask ? null : await fetchFocusedTaskDetails(
             supabase,
             housekeeper.id,
           ).catch(() => ({}));
-          const focusedTask = (details && "task" in details)
-            ? details.task
-            : null;
+          const focusedTask = accessDetails?.task ??
+            ((details && "task" in details) ? details.task : null);
 
           const incidentPayload = {
             source_surface: "housekeeping_line",
@@ -1272,12 +1375,13 @@ export function createHousekeepingHandler(options: HandlerOptions = {}) {
             correlation_id: source_event_id,
             idempotency_key:
               `housekeeping_line:${source_event_id}:unauthorized_access_prep_action`,
-            cleaning_task_id: transitionResult.taskId || focusedTask?.id ||
-              null,
+            cleaning_task_id: isAccessTask
+              ? null
+              : transitionResult.taskId || focusedTask?.id || null,
             housekeeper_id: housekeeper.id,
             room_id: focusedTask?.room_id || null,
             booking_id: focusedTask?.booking_id || null,
-            issue_family: "access_prep",
+            issue_family: "housekeeping_out_of_sop",
             issue_subtype: "unauthorized_access_prep_action",
             severity: "high",
             latest_evidence_text: `Housekeeper ${
@@ -1288,6 +1392,9 @@ export function createHousekeepingHandler(options: HandlerOptions = {}) {
             metadata: {
               required_capability:
                 (transitionResult as any).required_capability || null,
+              access_prep_task_id: isAccessTask
+                ? transitionResult.taskId || postbackTaskId
+                : null,
             },
           };
 
@@ -1306,15 +1413,9 @@ export function createHousekeepingHandler(options: HandlerOptions = {}) {
           }
 
           return jsonResponse({
-            ok: true,
-            action: "rejected",
-            housekeeping_reply: {
-              text: "ขออภัยค่ะ คุณไม่มีสิทธิ์ดำเนินการนี้ ระบบได้แจ้งเตือนความปลอดภัยแล้วค่ะ",
-            },
-            internal_notification: null,
-            guest_draft_request: null,
+            ok: false,
+            error: "capability_denied",
             incident_candidate: incidentPayload,
-            evidence: transitionResult,
           });
         }
 
@@ -1375,6 +1476,7 @@ export function createHousekeepingHandler(options: HandlerOptions = {}) {
       const taskDetails = await fetchTaskAndRoom(
         supabase,
         transitionResult.taskId,
+        isAccessTask ? "access_prep" : "cleaning",
       );
       if ("error" in taskDetails) {
         return jsonResponse({
@@ -1406,7 +1508,9 @@ export function createHousekeepingHandler(options: HandlerOptions = {}) {
         operatorName,
       );
 
-      const qr = await buildQuickReplies(supabase, task, expectedSecret);
+      const qr = isAccessTask
+        ? null
+        : await buildQuickReplies(supabase, task, expectedSecret);
 
       return jsonResponse({
         ok: true,

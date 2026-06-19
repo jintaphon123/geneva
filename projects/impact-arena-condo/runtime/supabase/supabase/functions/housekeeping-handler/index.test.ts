@@ -1,4 +1,7 @@
-import { assertEquals } from "https://deno.land/std@0.208.0/assert/mod.ts";
+import {
+  assertEquals,
+  assertExists,
+} from "https://deno.land/std@0.224.0/assert/mod.ts";
 import {
   buildHousekeepingPostbackData,
   createHousekeepingHandler,
@@ -53,6 +56,25 @@ class MockQueryBuilder {
       maybeSingle: () => Promise.resolve(result),
     });
   }
+
+  upsert(payload: any, _options?: any) {
+    this.client.writes.push({ table: this.table, method: "upsert", payload });
+    const result = this.client.results[`${this.table}:upsert`] ||
+      { data: { id: "mock-upsert-id", ...payload }, error: null };
+    this.data = result.data;
+    this.error = result.error;
+    const promise = Promise.resolve(result);
+    return Object.assign(promise, {
+      select: (_cols?: string) => {
+        return Object.assign(Promise.resolve(result), {
+          single: () => Promise.resolve(result),
+          maybeSingle: () => Promise.resolve(result),
+        });
+      },
+      single: () => Promise.resolve(result),
+      maybeSingle: () => Promise.resolve(result),
+    });
+  }
 }
 
 class MockSupabaseClient {
@@ -74,11 +96,13 @@ class MockSupabaseClient {
 function handlerWith(
   db: MockSupabaseClient,
   transition?: any,
+  accessTransition?: any,
 ) {
   return createHousekeepingHandler({
     getEnv: (key) => key === "N8N_WEBHOOK_SECRET" ? WEBHOOK_SECRET : undefined,
     createSupabase: () => db,
     transition,
+    accessTransition,
   });
 }
 
@@ -628,6 +652,71 @@ Deno.test("Task 10 HTTP - supports postbackTaskId parameter in transition reques
   assertEquals(receivedOverrideId, targetTaskId);
 });
 
+Deno.test("Phase 6 HTTP routes Access Prep postbacks to the Access Prep state service", async () => {
+  const db = new MockSupabaseClient();
+  activeHousekeeper(db);
+  const taskId = "77777777-7777-4777-8777-777777777777";
+  db.results[`access_prep_tasks:id:${taskId}`] = {
+    data: {
+      id: taskId,
+      room_id: "room-active-77",
+      status: "in_progress",
+      assigned_housekeeper_id: "hk-active-77",
+    },
+    error: null,
+  };
+  db.results["rooms:id:room-active-77"] = {
+    data: { room_code: "C8/13/15" },
+    error: null,
+  };
+
+  let cleaningCalls = 0;
+  let accessInput: any = null;
+  const handler = handlerWith(
+    db,
+    (() => {
+      cleaningCalls += 1;
+      throw new Error("cleaning transition must not handle Access Prep");
+    }) as any,
+    ((_db: any, input: any) => {
+      accessInput = input;
+      return Promise.resolve({
+        ok: true,
+        action: "mark_key_placed",
+        taskId,
+        previousState: "in_progress",
+        newState: "in_progress",
+      });
+    }) as any,
+  );
+
+  const postbackData = await buildHousekeepingPostbackData(
+    "mark_key_placed",
+    taskId,
+    null,
+    WEBHOOK_SECRET,
+    "access_prep",
+  );
+  const res = await handler(request({
+    line_user_id: "U_active_test_77",
+    text: postbackData,
+    source_event_id: SOURCE_EVENT_ID,
+  }));
+  const body = await res.json();
+
+  assertEquals(res.status, 200);
+  assertEquals(body.ok, true);
+  assertEquals(body.action, "mark_key_placed");
+  assertEquals(cleaningCalls, 0);
+  assertEquals(accessInput, {
+    taskId,
+    housekeeperId: "hk-active-77",
+    action: "mark_key_placed",
+    sourceEventId: SOURCE_EVENT_ID,
+    payload: {},
+  });
+});
+
 Deno.test("Task 10 HTTP - rejects tampered task postback signature", async () => {
   const db = new MockSupabaseClient();
   activeHousekeeper(db);
@@ -801,4 +890,154 @@ Deno.test("Task 5 HTTP - urgent severity incident candidate on safety issues", a
   const body = await res.json();
   assertEquals(body.ok, true);
   assertEquals(body.incident_candidate.severity, "urgent");
+});
+
+Deno.test("Phase 6 HTTP - Access Prep acknowledge sets access focus with onConflict housekeeper_id", async () => {
+  const db = new MockSupabaseClient();
+  activeHousekeeper(db);
+  db.results[`housekeeper_task_focus:upsert`] = { data: null, error: null };
+  const targetTaskId = "ap-task-42";
+
+  let receivedPayload: any = null;
+  const accessTransition = (_client: any, params: any) => {
+    return Promise.resolve({
+      ok: true,
+      action: "acknowledge_task",
+      taskId: targetTaskId,
+      previousState: "sent",
+      newState: "acknowledged",
+    });
+  };
+
+  const originalUpsert = db.from;
+  db.from = (table: string) => {
+    const chain = originalUpsert.call(db, table);
+    if (table === "housekeeper_task_focus") {
+      const origUpsert = (chain as any).upsert;
+      (chain as any).upsert = (payload: any, options: any) => {
+        receivedPayload = payload;
+        assertEquals(options, { onConflict: "housekeeper_id" });
+        return origUpsert.call(chain, payload, options);
+      };
+    }
+    return chain;
+  };
+
+  const handler = handlerWith(db, undefined, accessTransition as any);
+
+  const postbackData = await buildHousekeepingPostbackData(
+    "acknowledge_task",
+    targetTaskId,
+    "access_prep",
+    WEBHOOK_SECRET,
+  );
+
+  const res = await handler(request({
+    line_user_id: "U_active_test_77",
+    text: "not used",
+    source_event_id: SOURCE_EVENT_ID,
+    postback_data: postbackData,
+  }));
+
+  assertEquals(res.status, 200);
+  assertExists(receivedPayload);
+  assertEquals(receivedPayload.focus_type, "access_prep");
+  assertEquals(receivedPayload.focused_access_prep_task_id, targetTaskId);
+});
+
+Deno.test("Phase 6 HTTP - Access Prep done clears access focus", async () => {
+  const db = new MockSupabaseClient();
+  activeHousekeeper(db);
+  db.results[`housekeeper_task_focus:upsert`] = { data: null, error: null };
+  db.results[`cleaning_tasks:select`] = { data: null, error: null };
+  const targetTaskId = "ap-task-42";
+
+  let receivedPayload: any = null;
+  const accessTransition = (_client: any, params: any) => {
+    return Promise.resolve({
+      ok: true,
+      action: "mark_room_open",
+      taskId: targetTaskId,
+      previousState: "in_progress",
+      newState: "done",
+    });
+  };
+
+  const originalUpsert = db.from;
+  db.from = (table: string) => {
+    const chain = originalUpsert.call(db, table);
+    if (table === "housekeeper_task_focus") {
+      const origUpsert = (chain as any).upsert;
+      (chain as any).upsert = (payload: any, options: any) => {
+        receivedPayload = payload;
+        assertEquals(options, { onConflict: "housekeeper_id" });
+        return origUpsert.call(chain, payload, options);
+      };
+    }
+    return chain;
+  };
+
+  const handler = handlerWith(db, undefined, accessTransition as any);
+
+  const postbackData = await buildHousekeepingPostbackData(
+    "mark_room_open",
+    targetTaskId,
+    "access_prep",
+    WEBHOOK_SECRET,
+  );
+
+  const res = await handler(request({
+    line_user_id: "U_active_test_77",
+    text: "not used",
+    source_event_id: SOURCE_EVENT_ID,
+    postback_data: postbackData,
+  }));
+
+  assertEquals(res.status, 200);
+  assertExists(receivedPayload);
+  assertEquals(receivedPayload.focus_type, null);
+  assertEquals(receivedPayload.focused_access_prep_task_id, null);
+  assertEquals(receivedPayload.focused_cleaning_task_id, null);
+});
+
+Deno.test("Phase 6 HTTP - capability denial stores access_prep_task_id and cleaning_task_id=null", async () => {
+  const db = new MockSupabaseClient();
+  activeHousekeeper(db);
+  const targetTaskId = "ap-task-42";
+
+  const accessTransition = (_client: any, params: any) => {
+    return Promise.resolve({
+      ok: false,
+      error: "capability_denied",
+      message: "Insufficient capabilities",
+      taskId: targetTaskId,
+      required_capability: "open_room",
+    });
+  };
+
+  const handler = handlerWith(db, undefined, accessTransition as any);
+
+  const postbackData = await buildHousekeepingPostbackData(
+    "mark_room_open",
+    targetTaskId,
+    "access_prep",
+    WEBHOOK_SECRET,
+  );
+
+  const res = await handler(request({
+    line_user_id: "U_active_test_77",
+    text: "not used",
+    source_event_id: SOURCE_EVENT_ID,
+    postback_data: postbackData,
+  }));
+
+  assertEquals(res.status, 200);
+  const body = await res.json();
+  assertEquals(body.ok, false);
+  const incident = body.incident_candidate;
+  assertExists(incident);
+  assertEquals(incident.issue_family, "housekeeping_out_of_sop");
+  assertEquals(incident.issue_subtype, "unauthorized_access_prep_action");
+  assertEquals(incident.cleaning_task_id, null);
+  assertEquals(incident.metadata.access_prep_task_id, targetTaskId);
 });

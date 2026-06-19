@@ -1,0 +1,551 @@
+INSPECT_PHASE6_REAL_LINE_DOD
+{
+  "marker": "PHASE6_REAL_LINE_DOD",
+  "run_id": "6f63c037",
+  "prepared_at": "2026-06-19T18:14:56.514477Z",
+  "housekeeper": {
+    "id": "196eb9f0-85a3-48e1-b80f-e0ca7d70f80c",
+    "display_name": "Unknown Operator",
+    "masked_line_user_id": "U0da20...a3e1"
+  },
+  "unauthorized_housekeeper_id": "ecf53bfb-027c-4474-9dc8-5714f47c95ae",
+  "room_ids": [
+    "1b9d8775-00a1-4008-a0fc-f2d19dffa3a7",
+    "3f297d90-3f4a-42f5-83e1-b3599b21cacb",
+    "82c1be5e-92f5-43c6-8d20-4dead18c077f",
+    "fa0ff74b-91f9-4fb3-ad10-96b391002908",
+    "6082dbf2-6ca0-432d-b055-46af40d78263"
+  ],
+  "guest_ids": [
+    "47873b7d-26dc-4e47-a2ca-cb270018e247",
+    "6074c993-e508-4f4f-99b5-bbb2ecfdaa2d",
+    "afd56e5d-d17b-40bd-bf94-7b232abac173",
+    "b4e2900e-021c-4859-b6fe-50ba4e9d617b",
+    "afee0666-24f9-4369-93e8-fc0c2e2863f1"
+  ],
+  "booking_ids": [
+    "8e59cf21-aca1-4982-9dff-98bd572fc366",
+    "7ae897f2-9219-4f88-a293-ead3f6ca90d0",
+    "fbc6a96b-cc63-4c56-ab0a-48d88583080e",
+    "83cc38e4-0e6e-4d48-893e-cb63c64eb7d8",
+    "289a5a50-6075-4798-a680-73536a6ff8fb"
+  ],
+  "cleaning_task_ids": [
+    "30558d27-f017-4896-b540-e1f70f0aaf1f",
+    "72491cff-890f-4375-bafb-7be622c441a5",
+    "ac58c8f2-bc58-4c06-99cd-dacad50aa7a0",
+    "283d4577-985a-44d3-b4f0-daab3af6f219",
+    "4b87c491-b89c-41f1-976e-3ca0023a9a87"
+  ],
+  "access_prep_task_ids": [
+    "13d39717-c490-45cd-b226-c9bedf3c409d"
+  ],
+  "asset_row_ids": [
+    "1a94dce9-a9db-4d34-8e42-a1cb8e58d51a"
+  ],
+  "target": {
+    "booking_id": "8e59cf21-aca1-4982-9dff-98bd572fc366",
+    "cleaning_task_id": "30558d27-f017-4896-b540-e1f70f0aaf1f",
+    "access_prep_task_id": "13d39717-c490-45cd-b226-c9bedf3c409d"
+  },
+  "initial_readiness": {
+    "ready": false,
+    "room_id": "1b9d8775-00a1-4008-a0fc-f2d19dffa3a7",
+    "blockers": [
+      "cleaning_incomplete",
+      "access_prep_incomplete"
+    ],
+    "booking_id": "8e59cf21-aca1-4982-9dff-98bd572fc366",
+    "cleaning_ready": false,
+    "booking_verified": true,
+    "access_prep_ready": false,
+    "active_access_incident": false,
+    "room_assignment_stable": true,
+    "approved_access_content": true
+  },
+  "cleaning_tasks": [
+    {
+      "id": "4b87c491-b89c-41f1-976e-3ca0023a9a87",
+      "task_key": "PHASE6_REAL_LINE_DOD-cleaning-6f63c037-5",
+      "room_id": "6082dbf2-6ca0-432d-b055-46af40d78263",
+      "booking_id": "289a5a50-6075-4798-a680-73536a6ff8fb",
+      "internal_ops_case_id": null,
+      "task_type": "turnover_cleaning",
+      "priority": "normal",
+      "status": "waiting_ack",
+      "dispatch_status": "sent",
+      "assigned_housekeeper_id": "196eb9f0-85a3-48e1-b80f-e0ca7d70f80c",
+      "ack_due_at": null,
+      "acknowledged_at": null,
+      "planned_start_at": null,
+      "due_at": "2026-06-19T18:48:56.514713+00:00",
+      "started_at": null,
+      "completed_at": null,
+      "checklist_status": "pending",
+      "requires_admin_attention": false,
+      "blocker_reason": null,
+      "instructions": "PHASE6_REAL_LINE_DOD: เติมน้ำ 4 ขวด สบู่ ผ้าขนหนู แล้วรายงานปัญหาผ่านปุ่ม",
+      "notes": null,
+      "created_by": null,
+      "created_at": "2026-06-19T18:15:06.30532+00:00",
+      "updated_at": "2026-06-19T18:15:06.30532+00:00",
+      "source": "internal_ops",
+      "admin_action_id": null,
+      "dispatch_idempotency_key": null,
+      "dispatch_outbound_message_id": null,
+      "dispatch_error": null,
+      "dispatched_at": null,
+      "capabilities": {
+        "can_open_room": false,
+        "can_place_key": false,
+        "can_update_cleaning": true
+      },
+      "admin_priority_rank": 986
+    },
+    {
+      "id": "283d4577-985a-44d3-b4f0-daab3af6f219",
+      "task_key": "PHASE6_REAL_LINE_DOD-cleaning-6f63c037-4",
+      "room_id": "fa0ff74b-91f9-4fb3-ad10-96b391002908",
+      "booking_id": "83cc38e4-0e6e-4d48-893e-cb63c64eb7d8",
+      "internal_ops_case_id": null,
+      "task_type": "turnover_cleaning",
+      "priority": "normal",
+      "status": "waiting_ack",
+      "dispatch_status": "sent",
+      "assigned_housekeeper_id": "196eb9f0-85a3-48e1-b80f-e0ca7d70f80c",
+      "ack_due_at": null,
+      "acknowledged_at": null,
+      "planned_start_at": null,
+      "due_at": "2026-06-19T18:47:56.514713+00:00",
+      "started_at": null,
+      "completed_at": null,
+      "checklist_status": "pending",
+      "requires_admin_attention": false,
+      "blocker_reason": null,
+      "instructions": "PHASE6_REAL_LINE_DOD: เติมน้ำ 4 ขวด สบู่ ผ้าขนหนู แล้วรายงานปัญหาผ่านปุ่ม",
+      "notes": null,
+      "created_by": null,
+      "created_at": "2026-06-19T18:15:04.222515+00:00",
+      "updated_at": "2026-06-19T18:15:04.222515+00:00",
+      "source": "internal_ops",
+      "admin_action_id": null,
+      "dispatch_idempotency_key": null,
+      "dispatch_outbound_message_id": null,
+      "dispatch_error": null,
+      "dispatched_at": null,
+      "capabilities": {
+        "can_open_room": false,
+        "can_place_key": false,
+        "can_update_cleaning": true
+      },
+      "admin_priority_rank": 987
+    },
+    {
+      "id": "ac58c8f2-bc58-4c06-99cd-dacad50aa7a0",
+      "task_key": "PHASE6_REAL_LINE_DOD-cleaning-6f63c037-3",
+      "room_id": "82c1be5e-92f5-43c6-8d20-4dead18c077f",
+      "booking_id": "fbc6a96b-cc63-4c56-ab0a-48d88583080e",
+      "internal_ops_case_id": null,
+      "task_type": "turnover_cleaning",
+      "priority": "normal",
+      "status": "waiting_ack",
+      "dispatch_status": "sent",
+      "assigned_housekeeper_id": "196eb9f0-85a3-48e1-b80f-e0ca7d70f80c",
+      "ack_due_at": null,
+      "acknowledged_at": null,
+      "planned_start_at": null,
+      "due_at": "2026-06-19T18:46:56.514713+00:00",
+      "started_at": null,
+      "completed_at": null,
+      "checklist_status": "pending",
+      "requires_admin_attention": false,
+      "blocker_reason": null,
+      "instructions": "PHASE6_REAL_LINE_DOD: เติมน้ำ 4 ขวด สบู่ ผ้าขนหนู แล้วรายงานปัญหาผ่านปุ่ม",
+      "notes": null,
+      "created_by": null,
+      "created_at": "2026-06-19T18:15:02.089499+00:00",
+      "updated_at": "2026-06-19T18:15:02.089499+00:00",
+      "source": "internal_ops",
+      "admin_action_id": null,
+      "dispatch_idempotency_key": null,
+      "dispatch_outbound_message_id": null,
+      "dispatch_error": null,
+      "dispatched_at": null,
+      "capabilities": {
+        "can_open_room": false,
+        "can_place_key": false,
+        "can_update_cleaning": true
+      },
+      "admin_priority_rank": 988
+    },
+    {
+      "id": "72491cff-890f-4375-bafb-7be622c441a5",
+      "task_key": "PHASE6_REAL_LINE_DOD-cleaning-6f63c037-2",
+      "room_id": "3f297d90-3f4a-42f5-83e1-b3599b21cacb",
+      "booking_id": "7ae897f2-9219-4f88-a293-ead3f6ca90d0",
+      "internal_ops_case_id": null,
+      "task_type": "turnover_cleaning",
+      "priority": "normal",
+      "status": "waiting_ack",
+      "dispatch_status": "sent",
+      "assigned_housekeeper_id": "196eb9f0-85a3-48e1-b80f-e0ca7d70f80c",
+      "ack_due_at": null,
+      "acknowledged_at": null,
+      "planned_start_at": null,
+      "due_at": "2026-06-19T18:45:56.514713+00:00",
+      "started_at": null,
+      "completed_at": null,
+      "checklist_status": "pending",
+      "requires_admin_attention": false,
+      "blocker_reason": null,
+      "instructions": "PHASE6_REAL_LINE_DOD: เติมน้ำ 4 ขวด สบู่ ผ้าขนหนู แล้วรายงานปัญหาผ่านปุ่ม",
+      "notes": null,
+      "created_by": null,
+      "created_at": "2026-06-19T18:15:00.008619+00:00",
+      "updated_at": "2026-06-19T18:15:00.008619+00:00",
+      "source": "internal_ops",
+      "admin_action_id": null,
+      "dispatch_idempotency_key": null,
+      "dispatch_outbound_message_id": null,
+      "dispatch_error": null,
+      "dispatched_at": null,
+      "capabilities": {
+        "can_open_room": false,
+        "can_place_key": false,
+        "can_update_cleaning": true
+      },
+      "admin_priority_rank": 989
+    },
+    {
+      "id": "30558d27-f017-4896-b540-e1f70f0aaf1f",
+      "task_key": "PHASE6_REAL_LINE_DOD-cleaning-6f63c037-1",
+      "room_id": "1b9d8775-00a1-4008-a0fc-f2d19dffa3a7",
+      "booking_id": "8e59cf21-aca1-4982-9dff-98bd572fc366",
+      "internal_ops_case_id": null,
+      "task_type": "turnover_cleaning",
+      "priority": "urgent",
+      "status": "waiting_ack",
+      "dispatch_status": "sent",
+      "assigned_housekeeper_id": "196eb9f0-85a3-48e1-b80f-e0ca7d70f80c",
+      "ack_due_at": null,
+      "acknowledged_at": null,
+      "planned_start_at": null,
+      "due_at": "2026-06-19T18:44:56.514713+00:00",
+      "started_at": null,
+      "completed_at": null,
+      "checklist_status": "pending",
+      "requires_admin_attention": false,
+      "blocker_reason": null,
+      "instructions": "PHASE6_REAL_LINE_DOD: เติมน้ำ 4 ขวด สบู่ ผ้าขนหนู แล้วรายงานปัญหาผ่านปุ่ม",
+      "notes": null,
+      "created_by": null,
+      "created_at": "2026-06-19T18:14:57.53054+00:00",
+      "updated_at": "2026-06-19T18:14:57.53054+00:00",
+      "source": "internal_ops",
+      "admin_action_id": null,
+      "dispatch_idempotency_key": null,
+      "dispatch_outbound_message_id": null,
+      "dispatch_error": null,
+      "dispatched_at": null,
+      "capabilities": {
+        "can_open_room": false,
+        "can_place_key": false,
+        "can_update_cleaning": true
+      },
+      "admin_priority_rank": 1000
+    }
+  ],
+  "access_prep_tasks": [
+    {
+      "id": "13d39717-c490-45cd-b226-c9bedf3c409d",
+      "task_key": "PHASE6_REAL_LINE_DOD-access-6f63c037-1",
+      "booking_id": "8e59cf21-aca1-4982-9dff-98bd572fc366",
+      "room_id": "1b9d8775-00a1-4008-a0fc-f2d19dffa3a7",
+      "internal_ops_case_id": null,
+      "assigned_housekeeper_id": "196eb9f0-85a3-48e1-b80f-e0ca7d70f80c",
+      "owner_admin_user_id": null,
+      "priority": "urgent",
+      "status": "sent",
+      "dispatch_status": "sent",
+      "key_custody": "with_owner",
+      "capabilities_required": {
+        "can_open_room": true,
+        "can_place_key": true
+      },
+      "scheduled_for": "2026-06-19T18:14:58.602353+00:00",
+      "due_at": "2026-06-19T18:44:56.514713+00:00",
+      "ack_due_at": null,
+      "acknowledged_at": null,
+      "started_at": null,
+      "completed_at": null,
+      "blocker_reason": null,
+      "instructions": "PHASE6_REAL_LINE_DOD: Access Prep แยกจาก Cleaning",
+      "notes": null,
+      "override_reason": null,
+      "overridden_by": null,
+      "overridden_at": null,
+      "created_at": "2026-06-19T18:14:58.699352+00:00",
+      "updated_at": "2026-06-19T18:14:58.699352+00:00",
+      "admin_priority_rank": 1000
+    }
+  ],
+  "checklist": [
+    {
+      "id": "913848ce-c736-4690-aeec-20c85dcba0b9",
+      "cleaning_task_id": "30558d27-f017-4896-b540-e1f70f0aaf1f",
+      "room_id": "1b9d8775-00a1-4008-a0fc-f2d19dffa3a7",
+      "item_key": "bedsheet",
+      "item_label": "ผ้าปูที่นอน",
+      "required": true,
+      "status": "present",
+      "checked_by_housekeeper_id": null,
+      "checked_at": null,
+      "issue_note": null,
+      "exception_reason": null,
+      "created_at": "2026-06-19T18:14:57.922454+00:00",
+      "updated_at": "2026-06-19T18:14:57.922454+00:00"
+    },
+    {
+      "id": "b9535b6f-7bff-43ca-9127-064c39bdeb44",
+      "cleaning_task_id": "30558d27-f017-4896-b540-e1f70f0aaf1f",
+      "room_id": "1b9d8775-00a1-4008-a0fc-f2d19dffa3a7",
+      "item_key": "room_cleaned",
+      "item_label": "ทำความสะอาด",
+      "required": true,
+      "status": "present",
+      "checked_by_housekeeper_id": null,
+      "checked_at": null,
+      "issue_note": null,
+      "exception_reason": null,
+      "created_at": "2026-06-19T18:14:57.674274+00:00",
+      "updated_at": "2026-06-19T18:14:57.674274+00:00"
+    },
+    {
+      "id": "ff342b65-f8f4-4a6b-9ef3-80d1f3292038",
+      "cleaning_task_id": "30558d27-f017-4896-b540-e1f70f0aaf1f",
+      "room_id": "1b9d8775-00a1-4008-a0fc-f2d19dffa3a7",
+      "item_key": "soap",
+      "item_label": "สบู่",
+      "required": true,
+      "status": "present",
+      "checked_by_housekeeper_id": null,
+      "checked_at": null,
+      "issue_note": null,
+      "exception_reason": null,
+      "created_at": "2026-06-19T18:14:58.56209+00:00",
+      "updated_at": "2026-06-19T18:14:58.56209+00:00"
+    },
+    {
+      "id": "d04c097e-4193-4dd0-b937-2ed17cca9c1f",
+      "cleaning_task_id": "30558d27-f017-4896-b540-e1f70f0aaf1f",
+      "room_id": "1b9d8775-00a1-4008-a0fc-f2d19dffa3a7",
+      "item_key": "tissue",
+      "item_label": "ทิชชู่",
+      "required": true,
+      "status": "present",
+      "checked_by_housekeeper_id": null,
+      "checked_at": null,
+      "issue_note": null,
+      "exception_reason": null,
+      "created_at": "2026-06-19T18:14:58.427468+00:00",
+      "updated_at": "2026-06-19T18:14:58.427468+00:00"
+    },
+    {
+      "id": "6206a272-07f0-4034-a8cd-05f14082deaa",
+      "cleaning_task_id": "30558d27-f017-4896-b540-e1f70f0aaf1f",
+      "room_id": "1b9d8775-00a1-4008-a0fc-f2d19dffa3a7",
+      "item_key": "towels",
+      "item_label": "ผ้าขนหนู",
+      "required": true,
+      "status": "present",
+      "checked_by_housekeeper_id": null,
+      "checked_at": null,
+      "issue_note": null,
+      "exception_reason": null,
+      "created_at": "2026-06-19T18:14:58.076655+00:00",
+      "updated_at": "2026-06-19T18:14:58.076655+00:00"
+    },
+    {
+      "id": "5e9f680b-7f39-4e6a-bad0-fbad727cdceb",
+      "cleaning_task_id": "30558d27-f017-4896-b540-e1f70f0aaf1f",
+      "room_id": "1b9d8775-00a1-4008-a0fc-f2d19dffa3a7",
+      "item_key": "water",
+      "item_label": "น้ำ",
+      "required": true,
+      "status": "present",
+      "checked_by_housekeeper_id": null,
+      "checked_at": null,
+      "issue_note": null,
+      "exception_reason": null,
+      "created_at": "2026-06-19T18:14:58.249916+00:00",
+      "updated_at": "2026-06-19T18:14:58.249916+00:00"
+    }
+  ],
+  "cleaning_events": [],
+  "access_events": [],
+  "incidents": [],
+  "notification_outbox": [],
+  "focus": [
+    {
+      "id": "11cccc6b-c7dc-49a3-805e-efa37d10ee80",
+      "housekeeper_id": "196eb9f0-85a3-48e1-b80f-e0ca7d70f80c",
+      "focused_cleaning_task_id": null,
+      "focused_field_assistance_task_id": null,
+      "focus_type": null,
+      "last_command": "start_task",
+      "created_at": "2026-06-19T17:49:35.479217+00:00",
+      "updated_at": "2026-06-19T18:13:27.984979+00:00",
+      "focused_access_prep_task_id": null
+    }
+  ],
+  "readiness": {
+    "ready": false,
+    "room_id": "1b9d8775-00a1-4008-a0fc-f2d19dffa3a7",
+    "blockers": [
+      "cleaning_incomplete",
+      "access_prep_incomplete"
+    ],
+    "booking_id": "8e59cf21-aca1-4982-9dff-98bd572fc366",
+    "cleaning_ready": false,
+    "booking_verified": true,
+    "access_prep_ready": false,
+    "active_access_incident": false,
+    "room_assignment_stable": true,
+    "approved_access_content": true
+  },
+  "recent_line_events": [
+    {
+      "id": "d1fa9483-bcfe-4498-863b-a41c9d50f7bc",
+      "line_channel": "housekeeping_line",
+      "line_user_id": "U0da20...a3e1",
+      "event_type": "message",
+      "raw_payload": {
+        "mode": "active",
+        "type": "message",
+        "source": {
+          "type": "user",
+          "userId": "U0da20...a3e1"
+        },
+        "message": {
+          "id": "619173996290375854",
+          "text": "คิวงาน",
+          "type": "text",
+          "quoteToken": "irdMK6sZDvus7NaghKQmKU4B-zX3ma1cn5lZmFxQlcWE0G9Wlkp-MPlCgkNJ1rToq5zFmEu17s86EqGOuRnVj6k-0Zz5Dirvr0kwNvCD9In2guUn9gDt_wD1hsM9fwJ1p5V1BvSMSnEVud_YMccWgA",
+          "markAsReadToken": "AKsI7jJwsyFJn47jIdvL0sf8cwoppVzcPpdazYz0po7nF31HUwGrFER_dNtlaOmtv4hCVrT8kT_V6r-LVACLjej83szDN6b5-ieFpX_yQCjSF9SB7oYciubUaSNs7q61t9sTTsxYHPKQXOtxtnsw0_K2cdjGq9f2fNWbYjCnRd8uhFqzrL6xNEFHABrmM6bUAQFWwzYnKZXyRzMUitNhzQ"
+        },
+        "timestamp": 1781887765087,
+        "webhookEventId": "01KVGCK32SNNY37CP0343HMJ8B",
+        "deliveryContext": {
+          "isRedelivery": false
+        }
+      },
+      "processing_status": "dispatched",
+      "created_at": "2026-06-19T16:49:26.134076+00:00"
+    },
+    {
+      "id": "52bd0af1-95b9-4b0c-b18f-36c357e03328",
+      "line_channel": "housekeeping_line",
+      "line_user_id": "U0da20...a3e1",
+      "event_type": "message",
+      "raw_payload": {
+        "mode": "active",
+        "type": "message",
+        "source": {
+          "type": "user",
+          "userId": "U0da20...a3e1"
+        },
+        "message": {
+          "id": "619173968019980364",
+          "text": "งานวันนี้",
+          "type": "text",
+          "quoteToken": "dQp1QPXAoPkSdFQSSOk2H-cZ-T4pTiLcvd4L1FR9Bk-1heeNFa4zh5ubLjghVLvW3vBrtpCgG3D6Tu1hg4DIZi7m5knDXG_BY2E2fK_mH0cSaIUJLLD_QQCHBY8i8NQAPPvzTykVe9KRleip6KB8xw",
+          "markAsReadToken": "hfvJ_XnuVrjX9y64Et53RecHAKKe8r_ReM7IItxAw0KP5GtZoS8aQMaZjMKeER_Bg6cJOf8z-0B8Q6F6Xnr_1S5volFPI7dLmMn0htAQZ60d-Mt_bExh-b9mEGMiU0q01yqVrfXecTgknxHMZOYAlyXTX41L4KrHe4pKbLj5Xt3_BxKqXHKlz46Cre13IGLWPROfcYLFmx4YimE40J9XnA"
+        },
+        "timestamp": 1781887748363,
+        "webhookEventId": "01KVGCJJR5NZFWPTE6GJ6S91WT",
+        "deliveryContext": {
+          "isRedelivery": false
+        }
+      },
+      "processing_status": "dispatched",
+      "created_at": "2026-06-19T16:49:09.342696+00:00"
+    },
+    {
+      "id": "c395c845-a15d-4559-8b05-61e6bae67d00",
+      "line_channel": "housekeeping_line",
+      "line_user_id": "U0da20...a3e1",
+      "event_type": "postback",
+      "raw_payload": {
+        "mode": "active",
+        "type": "postback",
+        "source": {
+          "type": "user",
+          "userId": "U0da20...a3e1"
+        },
+        "postback": {
+          "data": "action=next_task"
+        },
+        "timestamp": 1781887727518,
+        "webhookEventId": "01KVGCHY1GE1GCBVYCR8ZMFYR5",
+        "deliveryContext": {
+          "isRedelivery": false
+        }
+      },
+      "processing_status": "dispatched",
+      "created_at": "2026-06-19T16:48:48.624719+00:00"
+    },
+    {
+      "id": "6e92591e-4d1f-496f-a9c4-31c09a2af693",
+      "line_channel": "housekeeping_line",
+      "line_user_id": "U0da20...a3e1",
+      "event_type": "message",
+      "raw_payload": {
+        "mode": "active",
+        "type": "message",
+        "source": {
+          "type": "user",
+          "userId": "U0da20...a3e1"
+        },
+        "message": {
+          "id": "619173803704713456",
+          "text": "เสร็จงาน",
+          "type": "text",
+          "quoteToken": "Ipi0eam4_lZtw6SKCW68NCpVZmhktANypMqegng7lwMr9KYxQq2vpw_3JeqKSEny2mhfAwMosTPFkaEXtpRdZs4A9E9SE45jY3lWW5-E2HJJtmFWdJAmQO1wxG-ca0u1orKd95B2MKNRPgrEPcHDyw",
+          "markAsReadToken": "FVU1y9Qy5YZHDbw2KpB7M7rqpSSv93IYZxslDVXj97JV-dGhHWi_tPs7Y22N0uGKPOsy4_rDeiFuxxUTMy0a72rmwgspozeMEWuu0BpyGo9Z-ADb8kakwhVcPBdZgIc9JwZbywwphpdfq-4Y2VMim1gxrDeMwip_3kXwEzYLv7SD_T_LvppZf68NRZi-n_648sR0ktILVbyhYVtdzdEPxg"
+        },
+        "timestamp": 1781887650347,
+        "webhookEventId": "01KVGCFK184870TBBAZHYSJY08",
+        "deliveryContext": {
+          "isRedelivery": false
+        }
+      },
+      "processing_status": "dispatched",
+      "created_at": "2026-06-19T16:47:31.19159+00:00"
+    },
+    {
+      "id": "e1caec91-fd31-45b7-9466-6daaf51373a0",
+      "line_channel": "housekeeping_line",
+      "line_user_id": "U0da20...a3e1",
+      "event_type": "postback",
+      "raw_payload": {
+        "mode": "active",
+        "type": "postback",
+        "source": {
+          "type": "user",
+          "userId": "U0da20...a3e1"
+        },
+        "postback": {
+          "data": "action=mark_item_missing&task_id=44814e21-987f-4199-897b-4809afe6be44&item=water&sig=FBDFOGmq04_hus0xZ9H4Ff8PZyaQiPvKfUwGA8l2Q1Q"
+        },
+        "timestamp": 1781887634378,
+        "webhookEventId": "01KVGCF38N2AET55WM620RZW24",
+        "deliveryContext": {
+          "isRedelivery": false
+        }
+      },
+      "processing_status": "dispatched",
+      "created_at": "2026-06-19T16:47:15.241939+00:00"
+    }
+  ],
+  "evidence_kind": "synthetic_live_handler"
+}
