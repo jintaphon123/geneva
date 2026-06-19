@@ -1,5 +1,9 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
-import { buildQueueFlexMessage, type QueuePage } from "./cards.ts";
+import {
+  buildProblemMenuFlexMessage,
+  buildQueueFlexMessage,
+  type QueuePage,
+} from "./cards.ts";
 import { HousekeepingIntent, parseCommand } from "./commands.ts";
 import { loadHousekeepingQueue } from "./queue.ts";
 import { handleStateTransition, TransitionResult } from "./state.ts";
@@ -70,13 +74,13 @@ async function hasValidHousekeepingPostbackSignature(
   const taskId = params.get("task_id") || params.get("taskid");
   const action = params.get("action");
   if (!signature || !taskId || !action || !UUID_RE.test(taskId)) return false;
-  const expected = await buildHousekeepingPostbackData(
-    action,
-    taskId,
-    params.get("item"),
+  const payloadParams = new URLSearchParams(params);
+  payloadParams.delete("sig");
+  const expectedSig = await signPostbackPayload(
+    payloadParams.toString(),
     secret,
   );
-  return expected === value;
+  return expectedSig === signature;
 }
 
 function jsonResponse(body: Record<string, unknown>, status = 200): Response {
@@ -148,6 +152,26 @@ function getItemLabel(item: string): string {
     room_cleaned: "ความสะอาดห้อง",
   };
   return labels[item] || item;
+}
+
+function getProblemCategoryLabel(category: string): string {
+  const labels: Record<string, string> = {
+    water: "ไม่ได้ใส่น้ำ",
+    soap: "ไม่ได้ใส่สบู่",
+    towels: "ไม่ได้ใส่ผ้าขนหนู",
+    damaged_or_lost: "ของเสีย/ของหาย",
+    other: "อื่นๆ",
+  };
+  return labels[category] ?? category;
+}
+
+function getProblemChecklistItem(
+  category: string,
+): "water" | "soap" | "towels" | null {
+  if (category === "water" || category === "soap" || category === "towels") {
+    return category;
+  }
+  return null;
 }
 
 function classifyHousekeepingSeverity(
@@ -670,8 +694,16 @@ export function createHousekeepingHandler(options: HandlerOptions = {}) {
     }
 
     try {
-      const { line_user_id, text, source_event_id, display_name } = await req
-        .json();
+      const {
+        line_user_id,
+        text,
+        source_event_id,
+        display_name,
+        message_type,
+        message_id,
+        media,
+        ai_summary: _ignoredAiSummary,
+      } = await req.json();
 
       if (!line_user_id || !text || !source_event_id) {
         return jsonResponse({
@@ -703,6 +735,18 @@ export function createHousekeepingHandler(options: HandlerOptions = {}) {
         }, 403);
       }
       const intent = parseCommand(text);
+
+      const postbackTaskIdFromText = (() => {
+        if (
+          text.includes("action=") &&
+          (text.includes("task_id=") || text.includes("taskid="))
+        ) {
+          const searchParams = new URLSearchParams(text);
+          const tid = searchParams.get("task_id") || searchParams.get("taskid");
+          return tid && UUID_RE.test(tid) ? tid : null;
+        }
+        return null;
+      })();
 
       if (intent.action === "enroll") {
         const { data: existing, error: lookupError } = await supabase
@@ -832,6 +876,211 @@ export function createHousekeepingHandler(options: HandlerOptions = {}) {
         });
       }
 
+      if (intent.action === "show_problem_menu") {
+        const taskDetails = await fetchTaskAndRoom(
+          supabase,
+          postbackTaskIdFromText ?? undefined,
+        );
+        if ("error" in taskDetails) {
+          return jsonResponse({
+            ok: false,
+            error: taskDetails.error,
+            message: taskDetails.message,
+            housekeeping_reply: {
+              text:
+                "ขออภัยค่ะ ระบบอ่านรายละเอียดงานไม่สำเร็จ กรุณาแจ้ง Internal Ops ตรวจสอบค่ะ",
+            },
+            internal_notification: {
+              text:
+                `Housekeeping handler error: ${taskDetails.error} (${taskDetails.message})`,
+            },
+            guest_draft_request: null,
+            evidence: { source_event_id, error: taskDetails.error },
+          }, 500);
+        }
+        const { task, roomCode } = taskDetails;
+        if (!task || task.assigned_housekeeper_id !== housekeeper.id) {
+          return jsonResponse({
+            ok: false,
+            error: "no_task_assigned",
+            message: "Housekeeper is not assigned to this task",
+            housekeeping_reply: { text: "ยังไม่มีงานที่เลือกอยู่ค่ะ" },
+            internal_notification: null,
+            guest_draft_request: null,
+            evidence: { source_event_id, task_id: postbackTaskIdFromText },
+          });
+        }
+        return jsonResponse({
+          ok: true,
+          action: "show_problem_menu",
+          housekeeping_reply: {
+            messages: [
+              await buildProblemMenuFlexMessage({
+                task_id: task.id,
+                task_kind: "cleaning",
+                room_code: roomCode,
+                status: task.status,
+              }, expectedSecret),
+            ],
+          },
+          internal_notification: null,
+          guest_draft_request: null,
+          evidence: { source_event_id, task_id: task.id },
+        });
+      }
+
+      if (intent.action === "problem_category") {
+        const taskDetails = await fetchTaskAndRoom(
+          supabase,
+          postbackTaskIdFromText ?? undefined,
+        );
+        if ("error" in taskDetails) {
+          return jsonResponse({
+            ok: false,
+            error: taskDetails.error,
+            message: taskDetails.message,
+            housekeeping_reply: {
+              text:
+                "ขออภัยค่ะ ระบบอ่านรายละเอียดงานไม่สำเร็จ กรุณาแจ้ง Internal Ops ตรวจสอบค่ะ",
+            },
+            internal_notification: {
+              text:
+                `Housekeeping handler error: ${taskDetails.error} (${taskDetails.message})`,
+            },
+            guest_draft_request: null,
+            evidence: { source_event_id, error: taskDetails.error },
+          }, 500);
+        }
+        const { task, roomCode } = taskDetails;
+        if (!task || task.assigned_housekeeper_id !== housekeeper.id) {
+          return jsonResponse({
+            ok: false,
+            error: "no_task_assigned",
+            message: "Housekeeper is not assigned to this task",
+            housekeeping_reply: { text: "ยังไม่มีงานที่เลือกอยู่ค่ะ" },
+            internal_notification: null,
+            guest_draft_request: null,
+            evidence: { source_event_id, task_id: postbackTaskIdFromText },
+          });
+        }
+
+        const categoryLabel = getProblemCategoryLabel(intent.category);
+        const checklistItem = getProblemChecklistItem(intent.category);
+        const transitionResult = checklistItem
+          ? await transition(
+            supabase,
+            line_user_id,
+            { action: "mark_item_missing", item: checklistItem },
+            source_event_id,
+            task.id,
+          )
+          : null;
+
+        if (
+          transitionResult && !transitionResult.ok &&
+          isSystemFailure(transitionResult)
+        ) {
+          return jsonResponse({
+            ok: false,
+            error: transitionResult.error,
+            message: transitionResult.message,
+            housekeeping_reply: {
+              text: "ขออภัยค่ะ ระบบบันทึกงานไม่สำเร็จ กรุณาแจ้ง Internal Ops ตรวจสอบค่ะ",
+            },
+            internal_notification: {
+              text:
+                `Housekeeping handler error: ${transitionResult.error} (${transitionResult.message})`,
+            },
+            guest_draft_request: null,
+            evidence: transitionResult,
+          }, 500);
+        }
+
+        const incidentPayload = {
+          source_surface: "housekeeping_line",
+          source_event_id,
+          correlation_id: source_event_id,
+          idempotency_key:
+            `housekeeping_line:${source_event_id}:problem_${intent.category}`,
+          cleaning_task_id: task.id,
+          housekeeper_id: housekeeper.id,
+          room_id: task.room_id ?? null,
+          booking_id: task.booking_id ?? null,
+          issue_family: "housekeeping_problem",
+          issue_subtype: checklistItem
+            ? `missing_${checklistItem}`
+            : intent.category,
+          severity: intent.category === "damaged_or_lost" ? "high" : "normal",
+          latest_evidence_text: `${
+            housekeeper.display_name || line_user_id
+          } reported ${categoryLabel} at room ${roomCode}`,
+          requires_internal_ops: true,
+          requires_owner: true,
+          metadata: {
+            category: intent.category,
+            checklist_item: checklistItem,
+            needs_classification: intent.category === "other",
+            awaiting_detail: !checklistItem,
+            message_type: message_type ?? null,
+            message_id: message_id ?? null,
+            media: media ?? null,
+          },
+        };
+
+        const { error: incidentError } = await supabase.rpc(
+          "report_operational_incident",
+          { p_incident: incidentPayload },
+        );
+        if (incidentError) {
+          return jsonResponse({
+            ok: false,
+            error: "database_error",
+            message: "Unable to report housekeeping problem incident",
+            housekeeping_reply: {
+              text: "ขออภัยค่ะ ระบบแจ้งปัญหาไม่สำเร็จ กรุณาแจ้ง Internal Ops ตรวจสอบค่ะ",
+            },
+            internal_notification: {
+              text:
+                `Housekeeping handler error: report_operational_incident (${incidentError.message})`,
+            },
+            guest_draft_request: null,
+            evidence: { source_event_id, task_id: task.id },
+          }, 500);
+        }
+
+        const quickReply = await buildQuickReplies(
+          supabase,
+          task,
+          expectedSecret,
+        );
+        const detailPrompt = checklistItem
+          ? `บันทึก ${categoryLabel} ของห้อง ${roomCode} แล้วค่ะ ระบบแจ้ง Internal Ops และเจ้าของแล้ว`
+          : `รับแจ้ง ${categoryLabel} ของห้อง ${roomCode} แล้วค่ะ กรุณาส่งรายละเอียดหรือรูปเพิ่มเติมในแชทนี้ได้เลย`;
+
+        return jsonResponse({
+          ok: true,
+          action: "problem_category",
+          housekeeping_reply: {
+            text: detailPrompt,
+            quickReply,
+          },
+          internal_notification: {
+            text: `แจ้งเตือน: แม่บ้าน ${
+              housekeeper.display_name || line_user_id
+            } รายงาน ${categoryLabel} ที่ห้อง ${roomCode} (แจ้ง Internal Ops และ owner)`,
+          },
+          guest_draft_request: null,
+          incident_candidate: incidentPayload,
+          evidence: transitionResult ?? {
+            ok: true,
+            action: "problem_category",
+            taskId: task.id,
+            previousState: task.status,
+            newState: task.status,
+          },
+        });
+      }
+
       if (intent.action === "unknown") {
         const details = await fetchFocusedTaskDetails(supabase, housekeeper.id)
           .catch(() => ({}));
@@ -930,17 +1179,7 @@ export function createHousekeepingHandler(options: HandlerOptions = {}) {
       }
 
       // Extract taskId from command if it is a postback query string
-      let postbackTaskId: string | null = null;
-      if (
-        text.includes("action=") &&
-        (text.includes("task_id=") || text.includes("taskid="))
-      ) {
-        const searchParams = new URLSearchParams(text.toLowerCase());
-        const tid = searchParams.get("task_id") || searchParams.get("taskid");
-        if (tid && UUID_RE.test(tid)) {
-          postbackTaskId = tid;
-        }
-      }
+      const postbackTaskId = postbackTaskIdFromText;
 
       const transitionResult = await transition(
         supabase,
