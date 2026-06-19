@@ -3849,3 +3849,57 @@ Phase 5 Slice 1 is now effectively complete.
 - Next task:
   Task 7 wires `housekeeping_reply.messages` through the n8n Housekeeping
   workflow into the LINE gateway send body.
+
+## 2026-06-19 — Phase 6 Tasks 13-15 Dashboard, Concurrency, Deploy, Synthetic Acceptance
+
+- Dashboard now reads `access_prep_tasks` separately from
+  `booking_access_preparations`, shows Cleaning and Access Prep as distinct
+  operational rows, preserves linked readiness, and exposes owner/admin
+  override warnings.
+- Added forward-only migration
+  `20260619140000_phase6_multi_operator_claim.sql`.
+  `claim_housekeeping_task` uses a row lock and assignment guard so two
+  operators cannot accept the same task; direct reassignment clears stale
+  focus for the previous operator.
+- Full Phase 6 regression passed:
+  - Housekeeping handler: `88 passed, 0 failed`
+  - LINE send transport: `7 passed, 0 failed`
+  - dashboard contract and production build passed
+  - scheduler, Internal control, room-access gate, snapshot, and
+    multi-operator contracts passed
+  - synthetic audit ended with
+    `ALL PHASE 6 SYNTHETIC ACCEPTANCE CRITERIA PASSED`
+- Supabase deployment:
+  - pushed `20260619122023_phase6_housekeeping_queue_and_override.sql`
+  - pushed `20260619124500_phase6_access_prep_scheduler.sql`
+  - pushed `20260619133000_phase6_room_access_readiness.sql`
+  - pushed `20260619140000_phase6_multi_operator_claim.sql`
+  - deployed `housekeeping-handler` and `line-webhook-gateway`
+- n8n predeploy export contained 17 workflows; postdeploy contained 18 because
+  `impact-phase6-access-prep-scheduler` was created.
+  `N8N_API_KEY` was not available, so deployment used the official n8n CLI
+  inside the container, not direct SQLite mutation. Six changed workflows
+  were imported, published, activated, and n8n was restarted.
+- Normalized source/live hashes matched for all changed workflows:
+  - Housekeeping Action: `c38475b0434d`
+  - Housekeeping Escalation: `3203e9c6ca0`
+  - Access Prep Scheduler: `1e85610c0adc`
+  - Internal Ops Agent Harness: `16ca89f4a08f`
+  - Internal Ops Snapshot: `509acf74228e`
+  - Guest Concierge: `e73e1ee7865`
+  - unrelated workflow drift: none
+- Controlled linked-backend smoke passed and cleaned its fixtures:
+  - second operator received `already_claimed`
+  - readiness blockers changed from Cleaning + Access Prep, to Access Prep
+    only, to no blockers
+  - Guest OA eligibility opened only after Cleaning and Access Prep were both
+    complete and a temporary approved access asset existed
+- Residual risks that keep Phase 6 open:
+  - Real Housekeeping LINE button-tap DoD has not been executed.
+  - Production currently has no approved LINE-sendable asset matching the
+    canonical room-access content gate, so real Guest OA room-entry remains
+    blocked until an approved asset is published.
+  - Deleting a task while it is still referenced by `housekeeper_task_focus`
+    can violate the focus check constraint; fixture cleanup must clear focus
+    first. Normal task lifecycle does not delete tasks, but this remains
+    schema hardening backlog.

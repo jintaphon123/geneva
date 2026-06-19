@@ -2,7 +2,8 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
-MIGRATION = ROOT / "runtime/supabase/supabase/migrations/20260619083246_phase6_combined_housekeeping_queue.sql"
+CLAIM_MIGRATION = ROOT / "runtime/supabase/supabase/migrations/20260619140000_phase6_multi_operator_claim.sql"
+QUEUE_MIGRATION = ROOT / "runtime/supabase/supabase/migrations/20260619083246_phase6_combined_housekeeping_queue.sql"
 QUEUE = ROOT / "runtime/supabase/supabase/functions/housekeeping-handler/queue.ts"
 HANDLER = ROOT / "runtime/supabase/supabase/functions/housekeeping-handler/index.ts"
 
@@ -13,7 +14,8 @@ def require(text: str, needle: str, failure: str) -> None:
 
 
 def main() -> None:
-    migration = MIGRATION.read_text()
+    migration = CLAIM_MIGRATION.read_text()
+    queue_migration = QUEUE_MIGRATION.read_text()
     queue = QUEUE.read_text()
     handler = HANDLER.read_text()
 
@@ -24,8 +26,8 @@ def main() -> None:
     require(migration, "housekeeper_task_focus", "claim must update operator focus atomically")
     require(migration, "focused_cleaning_task_id = NULL", "reassignment must invalidate old cleaning focus")
     require(migration, "focused_access_prep_task_id = NULL", "reassignment must invalidate old access focus")
-    require(migration, "admin_priority_rank", "admin priority must remain the first queue rank")
-    require(migration, "sort_key", "pagination must use a stable keyset cursor")
+    require(queue_migration, "admin_priority_rank", "admin priority must remain the first queue rank")
+    require(queue_migration, "sort_key", "pagination must use a stable keyset cursor")
 
     require(queue, "export async function claimHousekeepingTask(", "queue claim client missing")
     require(queue, 'supabase.rpc("claim_housekeeping_task"', "queue claim client must use RPC")
