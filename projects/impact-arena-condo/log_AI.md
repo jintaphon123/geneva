@@ -3741,3 +3741,29 @@ Phase 5 Slice 1 is now effectively complete.
 - Next task:
   Task 4 adds hidden button/Rich Menu action intents (`/today`, `/queue`,
   `/accept`, problem menu, details, and task selection) on top of this queue.
+
+## 2026-06-19 — Phase 6 Task 4 Housekeeping Button Action Intents
+
+- Added typed deterministic intents for the Housekeeping LINE button surface:
+  - today and combined queue navigation with optional opaque cursors
+  - accept-next, problem menu, and focused-task details
+  - explicit Cleaning or Access Prep task selection
+  - locked problem categories: water, soap, towels, damaged/lost, and other
+- Added exact hidden Rich Menu fallback contracts:
+  `/today`, `/queue`, `/accept`, `/problem`, and `/detail`.
+  These are transport shortcuts and are not intended to appear in normal
+  user-facing reply copy.
+- Postback parsing now supports navigation actions without a task ID, preserves
+  cursor casing, and rejects unsupported task kinds, problem categories,
+  checklist items, and malformed task-selection UUIDs.
+- Existing Thai free-text commands and legacy task postbacks remain supported.
+- Verification:
+  - command parser tests: `23 passed, 0 failed`
+  - combined Housekeeping Deno regression:
+    `79 passed, 0 failed`
+  - formatting: `deno fmt --check` passed for both changed files
+  - `python3 scratch/phase6_housekeeping_baseline.test.py` ended with
+    `PHASE 6 HOUSEKEEPING BASELINE PASSED`
+- Next task:
+  Task 5 connects these intents to focused-task persistence and the queue
+  handler routes.
