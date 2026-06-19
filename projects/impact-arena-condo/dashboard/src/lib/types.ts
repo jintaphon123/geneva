@@ -217,6 +217,24 @@ export interface CleaningTask {
   building?: string | null
 }
 
+export interface AccessPrepTask {
+  id: string
+  booking_id: string
+  room_id: string | null
+  priority: 'urgent' | 'high' | 'normal'
+  status: 'new' | 'sent' | 'acknowledged' | 'in_progress' | 'blocked' | 'done' | 'no_ack' | 'canceled' | 'delivery_failed'
+  key_custody: 'with_owner' | 'with_operator' | 'placed_in_room' | 'unknown'
+  due_at: string | null
+  scheduled_for: string | null
+  blocker_reason: string | null
+  assigned_housekeeper_id: string | null
+  owner_admin_user_id: string | null
+  override_reason: string | null
+  overridden_at: string | null
+  room_code?: string | null
+  building?: string | null
+}
+
 export interface CleaningChecklistItem {
   id: string
   cleaning_task_id: string | null
@@ -557,15 +575,21 @@ export function roomAccessVerdict(
 // ── Housekeeping helpers (D4) ──
 
 export const CLEANING_TASK_STATUS_LABEL: Record<string, string> = {
-  pending:     'รอเริ่ม',
-  queued:      'รอคิว',
-  assigned:    'มอบหมายแล้ว',
-  in_progress: 'กำลังทำ',
-  blocked:     'ติดปัญหา',
-  done:        'เสร็จแล้ว',
-  completed:   'เสร็จแล้ว',
-  verified:    'ตรวจแล้ว',
-  cancelled:   'ยกเลิก',
+  pending:          'รอเริ่ม',
+  queued:           'รอคิว',
+  assigned:         'มอบหมายแล้ว',
+  pending_dispatch: 'รอส่งงาน',
+  waiting_ack:      'รอรับงาน',
+  acknowledged:     'รับงานแล้ว',
+  in_progress:      'กำลังทำ',
+  blocked:          'ติดปัญหา',
+  done:             'เสร็จแล้ว',
+  completed:        'เสร็จแล้ว',
+  verified:         'ตรวจแล้ว',
+  delivery_failed:  'ส่งงานไม่สำเร็จ',
+  no_ack:           'ยังไม่รับงาน',
+  canceled:         'ยกเลิก',
+  cancelled:        'ยกเลิก',
 }
 
 // Launch exception checklist — canonical Thai labels used only when the row has no
@@ -585,6 +609,29 @@ export const CHECKLIST_ITEM_LABEL: Record<string, string> = {
 export function cleaningTaskStatusLabel(status: string | null | undefined): string {
   if (!status) return 'รอเริ่ม'
   return CLEANING_TASK_STATUS_LABEL[status] ?? 'อยู่ระหว่างดำเนินการ' // never leak a raw enum
+}
+
+export const ACCESS_PREP_TASK_STATUS_LABEL: Record<AccessPrepTask['status'], string> = {
+  new:             'รอส่งงาน',
+  sent:            'รอรับงาน',
+  acknowledged:    'รับงานแล้ว',
+  in_progress:     'กำลังเตรียม',
+  blocked:         'ติดปัญหา',
+  done:            'เสร็จแล้ว',
+  no_ack:          'ยังไม่รับงาน',
+  canceled:        'ยกเลิก',
+  delivery_failed: 'ส่งงานไม่สำเร็จ',
+}
+
+export function accessPrepTaskStatusLabel(status: AccessPrepTask['status']): string {
+  return ACCESS_PREP_TASK_STATUS_LABEL[status] ?? 'อยู่ระหว่างดำเนินการ'
+}
+
+export function ownerOverrideWarning(task: Pick<AccessPrepTask, 'override_reason' | 'overridden_at'>): string | null {
+  if (!task.overridden_at && !task.override_reason) return null
+  return task.override_reason
+    ? `เจ้าของ/แอดมินยืนยันแทน: ${task.override_reason}`
+    : 'เจ้าของ/แอดมินยืนยันงานแทน'
 }
 
 // Prefer the DB's item_label (already Thai); fall back to a known key, then a neutral label.
