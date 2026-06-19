@@ -3688,3 +3688,56 @@ Phase 5 Slice 1 is now effectively complete.
   the Task 2 migration is already applied remotely. Queue SQL for Task 3 must
   be generated in a new migration; do not edit the applied Task 2 migration
   and expect `supabase db push` to replay it.
+
+## 2026-06-19 — Phase 6 Task 3 Deterministic Combined Housekeeping Queue
+
+- Added `queue.ts` as a deterministic rule engine for one combined Cleaning
+  and Access Prep queue.
+- Locked queue order:
+  1. explicit Admin/Bond priority rank
+  2. room checking in today
+  3. Access Prep near check-in
+  4. open blocker/defect
+  5. building/floor route grouping
+  6. due time
+- Added pure helpers for:
+  - canonical ordering and terminal-task exclusion
+  - Bangkok-scoped `today` view
+  - five-card keyset pagination with next/previous cursors
+  - highest-priority eligible unacknowledged task selection
+  - bounded `get_housekeeping_queue` RPC calls
+- Added `admin_priority_rank` to `cleaning_tasks` and `access_prep_tasks`.
+  This is an explicit operational override signal; the queue does not infer a
+  direct Admin command from generic `urgent` or `source='internal_ops'` values.
+- Added service-role-only RPC:
+  `get_housekeeping_queue(p_housekeeper_id, p_view, p_limit, p_cursor)`.
+  The stable item shape includes task kind, guest/room/booking context,
+  priority/status, linked task status, missing items, owner, blocker state,
+  claimability, and queue rank.
+- Migration history:
+  - `20260619083246_phase6_combined_housekeeping_queue.sql`
+  - `20260619083644_phase6_combined_housekeeping_queue_fix.sql`
+  - `20260619084243_phase6_combined_housekeeping_linked_status_fix.sql`
+- Runtime corrections found during linked-database verification:
+  - fixed an aggregate/page-bound SQL error before acceptance
+  - preserved terminal linked truth so an Access Prep card can still show
+    Cleaning `completed`, and a Cleaning card can still show Access Prep `done`
+  - active linked tasks remain preferred over historical terminal tasks
+- Verification:
+  - Queue Deno tests: `10 passed, 0 failed`.
+  - Queue + Access Prep + state tests: `36 passed, 0 failed`.
+  - Linked rollback smoke proved direct-admin-first ordering, check-in-today,
+    near-check-in Access Prep, blocker ordering, five-card pagination,
+    next/previous cursor round-trip, Bangkok today filtering, terminal/foreign
+    exclusion, linked task status, owner label, and missing-item shape.
+  - `get_housekeeping_queue` is `STABLE SECURITY DEFINER` with
+    `search_path=public, pg_temp`.
+  - Execute privilege exists only for `service_role` and `postgres`.
+  - Supabase advisors returned only the four pre-existing Phase 4/5 warnings;
+    no Task 3 warning was introduced.
+  - `python3 scratch/phase6_housekeeping_baseline.test.py` ended with
+    `PHASE 6 HOUSEKEEPING BASELINE PASSED`; Housekeeping was `55/0`, Internal
+    Ops was `46/0`, and the Phase 5 capability integration passed.
+- Next task:
+  Task 4 adds hidden button/Rich Menu action intents (`/today`, `/queue`,
+  `/accept`, problem menu, details, and task selection) on top of this queue.
