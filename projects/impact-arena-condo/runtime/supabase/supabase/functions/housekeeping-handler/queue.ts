@@ -224,3 +224,18 @@ export async function loadHousekeepingQueue(
     p_cursor: cursor,
   });
 }
+
+export async function claimHousekeepingTask(
+  supabase: any,
+  taskKind: HousekeepingTaskKind,
+  taskId: string,
+  housekeeperId: string,
+  sourceEventId: string,
+) {
+  return await supabase.rpc("claim_housekeeping_task", {
+    p_task_kind: taskKind,
+    p_task_id: taskId,
+    p_housekeeper_id: housekeeperId,
+    p_source_event_id: sourceEventId,
+  });
+}

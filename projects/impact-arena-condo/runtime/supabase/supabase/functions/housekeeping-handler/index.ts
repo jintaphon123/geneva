@@ -5,7 +5,7 @@ import {
   type QueuePage,
 } from "./cards.ts";
 import { HousekeepingIntent, parseCommand } from "./commands.ts";
-import { loadHousekeepingQueue } from "./queue.ts";
+import { claimHousekeepingTask, loadHousekeepingQueue } from "./queue.ts";
 import { handleStateTransition, TransitionResult } from "./state.ts";
 
 type HandlerOptions = {
@@ -747,6 +747,13 @@ export function createHousekeepingHandler(options: HandlerOptions = {}) {
         }
         return null;
       })();
+      const postbackTaskKindFromText = (() => {
+        if (!text.includes("action=")) return null;
+        const taskKind = new URLSearchParams(text).get("task_kind");
+        return taskKind === "cleaning" || taskKind === "access_prep"
+          ? taskKind
+          : null;
+      })();
 
       if (intent.action === "enroll") {
         const { data: existing, error: lookupError } = await supabase
@@ -926,6 +933,66 @@ export function createHousekeepingHandler(options: HandlerOptions = {}) {
           internal_notification: null,
           guest_draft_request: null,
           evidence: { source_event_id, task_id: task.id },
+        });
+      }
+
+      if (
+        intent.action === "acknowledge_task" &&
+        postbackTaskIdFromText &&
+        postbackTaskKindFromText
+      ) {
+        const claimResult = await claimHousekeepingTask(
+          supabase,
+          postbackTaskKindFromText,
+          postbackTaskIdFromText,
+          housekeeper.id,
+          source_event_id,
+        );
+        if (claimResult.error) {
+          return jsonResponse({
+            ok: false,
+            error: "database_error",
+            message: "Unable to claim Housekeeping task",
+            housekeeping_reply: {
+              text: "ขออภัยค่ะ ระบบรับงานไม่สำเร็จ กรุณาลองใหม่อีกครั้ง",
+            },
+            internal_notification: {
+              text: `Housekeeping claim error: ${claimResult.error.message}`,
+            },
+            guest_draft_request: null,
+            evidence: { source_event_id, task_id: postbackTaskIdFromText },
+          }, 500);
+        }
+        const claim = claimResult.data ?? {};
+        if (claim.ok === false) {
+          return jsonResponse({
+            ok: true,
+            action: "rejected",
+            housekeeping_reply: {
+              text: claim.error === "already_claimed"
+                ? "งานนี้มีผู้รับไปแล้วค่ะ กรุณากดคิวงานเพื่อดูงานล่าสุด"
+                : "ไม่สามารถรับงานนี้ได้ในสถานะปัจจุบันค่ะ",
+            },
+            internal_notification: null,
+            guest_draft_request: null,
+            evidence: claim,
+          });
+        }
+        return jsonResponse({
+          ok: true,
+          action: "acknowledge_task",
+          housekeeping_reply: {
+            text: "รับงานเรียบร้อยค่ะ กดเริ่มงานเมื่อพร้อมดำเนินการ",
+          },
+          internal_notification: {
+            text: `แม่บ้าน ${housekeeper.display_name || line_user_id} รับงาน ${
+              postbackTaskKindFromText === "cleaning"
+                ? "Cleaning"
+                : "Access Prep"
+            } แล้ว`,
+          },
+          guest_draft_request: null,
+          evidence: claim,
         });
       }
 

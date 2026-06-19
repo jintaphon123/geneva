@@ -1,11 +1,12 @@
 import { assertEquals } from "https://deno.land/std@0.208.0/assert/mod.ts";
 import {
+  claimHousekeepingTask,
   loadHousekeepingQueue,
   orderQueue,
   paginateQueue,
+  type QueueTask,
   selectNextEligibleTask,
   todayTasks,
-  type QueueTask,
 } from "./queue.ts";
 
 const BANGKOK_NOW = new Date("2026-06-19T10:00:00+07:00");
@@ -162,8 +163,7 @@ Deno.test("pagination uses five items and stable next and previous cursors", () 
       dueAt: new Date(
         Date.parse("2026-06-19T01:00:00.000Z") + index * 60_000,
       ).toISOString(),
-    })
-  );
+    }));
 
   const first = paginateQueue(tasks, null, 5, BANGKOK_NOW);
   const second = paginateQueue(tasks, first.nextCursor, 5, BANGKOK_NOW);
@@ -183,48 +183,59 @@ Deno.test("pagination uses five items and stable next and previous cursors", () 
     "task-09",
     "task-10",
   ]);
-  assertEquals(back.items.map((task) => task.id), first.items.map((task) => task.id));
+  assertEquals(
+    back.items.map((task) => task.id),
+    first.items.map((task) => task.id),
+  );
   assertEquals(first.previousCursor, null);
   assertEquals(second.nextCursor?.direction, "next");
   assertEquals(second.previousCursor?.direction, "previous");
 });
 
 Deno.test("accept next chooses the highest-priority eligible unacknowledged task", () => {
-  const chosen = selectNextEligibleTask([
-    fixture({
-      id: "already-started",
-      adminPriorityRank: 100,
-      status: "in_progress",
-    }),
-    fixture({
-      id: "auto-checkin",
-      checkInDate: "2026-06-19",
-      status: "waiting_ack",
-    }),
-    fixture({
-      id: "admin-direct",
-      adminPriorityRank: 100,
-      status: "sent",
-    }),
-  ], "hk-1", BANGKOK_NOW);
+  const chosen = selectNextEligibleTask(
+    [
+      fixture({
+        id: "already-started",
+        adminPriorityRank: 100,
+        status: "in_progress",
+      }),
+      fixture({
+        id: "auto-checkin",
+        checkInDate: "2026-06-19",
+        status: "waiting_ack",
+      }),
+      fixture({
+        id: "admin-direct",
+        adminPriorityRank: 100,
+        status: "sent",
+      }),
+    ],
+    "hk-1",
+    BANGKOK_NOW,
+  );
 
   assertEquals(chosen?.id, "admin-direct");
 });
 
 Deno.test("tasks assigned to another operator are not claimable", () => {
-  const chosen = selectNextEligibleTask([
-    fixture({
-      id: "other-admin-direct",
-      assignedHousekeeperId: "hk-2",
-      adminPriorityRank: 100,
-      status: "sent",
-    }),
-    fixture({
-      id: "own-task",
-      assignedHousekeeperId: "hk-1",
-      status: "waiting_ack",
-    }),
-  ], "hk-1", BANGKOK_NOW);
+  const chosen = selectNextEligibleTask(
+    [
+      fixture({
+        id: "other-admin-direct",
+        assignedHousekeeperId: "hk-2",
+        adminPriorityRank: 100,
+        status: "sent",
+      }),
+      fixture({
+        id: "own-task",
+        assignedHousekeeperId: "hk-1",
+        status: "waiting_ack",
+      }),
+    ],
+    "hk-1",
+    BANGKOK_NOW,
+  );
 
   assertEquals(chosen?.id, "own-task");
 });
@@ -259,4 +270,84 @@ Deno.test("loadHousekeepingQueue sends bounded RPC arguments", async () => {
       p_cursor: { direction: "next", sortKey: ["cursor"] },
     },
   }]);
+});
+
+Deno.test("claimHousekeepingTask sends the atomic claim RPC contract", async () => {
+  const calls: Array<{ name: string; args: unknown }> = [];
+  const db = {
+    rpc(name: string, args: unknown) {
+      calls.push({ name, args });
+      return Promise.resolve({
+        data: {
+          ok: true,
+          action: "claimed",
+          taskId: "task-1",
+          taskKind: "cleaning",
+          newState: "acknowledged",
+        },
+        error: null,
+      });
+    },
+  };
+
+  const result = await claimHousekeepingTask(
+    db as any,
+    "cleaning",
+    "task-1",
+    "hk-1",
+    "10000000-0000-4000-8000-000000000001",
+  );
+
+  assertEquals(result.error, null);
+  assertEquals(calls, [{
+    name: "claim_housekeeping_task",
+    args: {
+      p_task_kind: "cleaning",
+      p_task_id: "task-1",
+      p_housekeeper_id: "hk-1",
+      p_source_event_id: "10000000-0000-4000-8000-000000000001",
+    },
+  }]);
+});
+
+Deno.test("pagination cursor is stable when an unrelated later task is inserted", () => {
+  const tasks = Array.from({ length: 7 }, (_, index) =>
+    fixture({
+      id: `task-${index + 1}`,
+      dueAt: new Date(Date.parse("2026-06-19T01:00:00Z") + index * 60_000)
+        .toISOString(),
+    }));
+  const first = paginateQueue(tasks, null, 5, BANGKOK_NOW);
+  const withUnrelatedInsert = [
+    ...tasks,
+    fixture({ id: "later-insert", dueAt: "2026-06-19T10:00:00Z" }),
+  ];
+  const second = paginateQueue(
+    withUnrelatedInsert,
+    first.nextCursor,
+    5,
+    BANGKOK_NOW,
+  );
+
+  assertEquals(second.items.slice(0, 2).map((task) => task.id), [
+    "task-6",
+    "task-7",
+  ]);
+});
+
+Deno.test("building efficiency cannot outrank explicit admin priority", () => {
+  const ordered = orderQueue([
+    fixture({ id: "same-building", building: "C3", floor: 1 }),
+    fixture({
+      id: "admin-priority",
+      building: "T9",
+      floor: 99,
+      adminPriorityRank: 1000,
+    }),
+  ], BANGKOK_NOW);
+
+  assertEquals(ordered.map((task) => task.id), [
+    "admin-priority",
+    "same-building",
+  ]);
 });
