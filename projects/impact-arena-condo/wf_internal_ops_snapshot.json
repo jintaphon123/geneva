@@ -1,0 +1,740 @@
+{
+  "updatedAt": "2026-06-02T12:59:59.000Z",
+  "createdAt": "2026-06-01T01:08:15.354Z",
+  "id": "impact-internal-ops-snapshot",
+  "name": "Impact - Internal Ops Snapshot",
+  "description": null,
+  "active": true,
+  "isArchived": false,
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "impact/internal-ops-snapshot",
+        "responseMode": "onReceived",
+        "responseCode": 200,
+        "options": {}
+      },
+      "id": "ios001-0000-0000-0000-000000000001",
+      "name": "Receive snapshot trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -560,
+        0
+      ],
+      "webhookId": "impact-internal-ops-snapshot"
+    },
+    {
+      "parameters": {
+        "jsCode": "const incoming = items[0].json;\nconst headers = incoming.headers ?? {};\nconst body = incoming.body ?? incoming;\nconst expectedSecret = $env.N8N_WEBHOOK_SECRET;\nconst receivedSecret = headers['x-impact-webhook-secret'] ?? headers['X-Impact-Webhook-Secret'];\nif (expectedSecret && receivedSecret !== expectedSecret) throw new Error('invalid_webhook_secret');\n\nconst lineChannel = body.line_channel ?? '';\nif (lineChannel !== 'internal_ops_oa') throw new Error('wrong_channel: ' + lineChannel);\n\nconst lineUserId = body.actor?.line_user_id ?? body.line_user_id ?? null;\nif (!lineUserId) throw new Error('missing_line_user_id');\n\nconst allowedFromEnv = String($env.LINE_INTERNAL_OPS_ALLOWED_USER_IDS ?? '')\n  .split(',')\n  .map((value) => value.trim())\n  .filter(Boolean);\n\nconst base = {\n  line_user_id: lineUserId,\n  conversation_id: body.conversation_id ?? null,\n  correlation_id: body.correlation_id ?? null,\n  source_event_id: body.source_event_id ?? null,\n  reply_token_ephemeral: body.reply_token_ephemeral ?? null,\n  line_channel: lineChannel,\n  trigger_word: body.trigger_word ?? '',\n  intent_hint: body.intent_hint ?? null,\n  snapshot_view: body.snapshot_view ?? 'full',\n  snapshot_scope: body.snapshot_scope ?? 'today',\n  auth_check: {\n    line_user_id: lineUserId,\n    env_allowlist_configured: allowedFromEnv.length > 0,\n    env_allowed: allowedFromEnv.length === 0 || allowedFromEnv.includes(lineUserId),\n  },\n};\n\nif (allowedFromEnv.length > 0 && !allowedFromEnv.includes(lineUserId)) {\n  return [{\n    json: {\n      ...base,\n      no_access: true,\n      reply: {\n        channel: 'internal_ops_oa',\n        to: lineUserId,\n        text: 'ขออภัยค่ะ บัญชี LINE นี้ยังไม่มีสิทธิ์ใช้งาน Internal Ops ค่ะ\\nถ้าควรมีสิทธิ์ใช้งาน รบกวนให้เจ้าของระบบเพิ่มบัญชีนี้ก่อนนะคะ',\n        conversation_id: body.conversation_id ?? null,\n        source_event_id: body.source_event_id ?? null,\n        correlation_id: body.correlation_id ?? null,\n        reply_token_ephemeral: body.reply_token_ephemeral ?? null,\n      },\n    },\n  }];\n}\n\nreturn [{ json: base }];\n"
+      },
+      "id": "ios001-0000-0000-0000-000000000002",
+      "name": "Validate and extract snapshot",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -840,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.SUPABASE_URL + '/rest/v1/admin_users?select=id,line_user_id,display_name,role,active&line_user_id=eq.' + $json.line_user_id + '&active=eq.true&limit=1' }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "={{ $env.SUPABASE_SERVICE_ROLE_KEY }}"
+            },
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.SUPABASE_SERVICE_ROLE_KEY }}"
+            }
+          ]
+        },
+        "options": {
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true
+            }
+          }
+        }
+      },
+      "id": "ios001-0000-0000-0000-000000000003",
+      "name": "GET authorized admin user",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -180,
+        120
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const ctx = $('Validate and extract snapshot').first().json;\n\nif (ctx.no_access) {\n  return [{ json: ctx }];\n}\n\nconst adminResp = items[0].json;\nconst adminBody = adminResp.body ?? adminResp;\nconst adminArr = Array.isArray(adminBody) ? adminBody : [adminBody].filter(Boolean);\nconst admin = adminArr.find((item) => item?.line_user_id === ctx.line_user_id && item?.active !== false);\n\nif (!admin?.id) {\n  return [{\n    json: {\n      ...ctx,\n      no_access: true,\n      auth_check: {\n        ...(ctx.auth_check ?? {}),\n        supabase_authorized: false,\n      },\n      reply: {\n        channel: 'internal_ops_oa',\n        to: ctx.line_user_id,\n        text: 'ขออภัยค่ะ บัญชี LINE นี้ยังไม่มีสิทธิ์ใช้งาน Internal Ops ค่ะ\\nตอนนี้ระบบจะไม่แสดงข้อมูลปฏิบัติการให้บัญชีที่ยังไม่ได้รับอนุญาตนะคะ',\n        conversation_id: ctx.conversation_id,\n        source_event_id: ctx.source_event_id,\n        correlation_id: ctx.correlation_id,\n        reply_token_ephemeral: ctx.reply_token_ephemeral,\n      },\n    },\n  }];\n}\n\nconst dateFormatter = new Intl.DateTimeFormat('en-CA', {\n  timeZone: 'Asia/Bangkok',\n  year: 'numeric',\n  month: '2-digit',\n  day: '2-digit',\n});\nconst today = dateFormatter.format(new Date());\nconst tomorrowDate = new Date(today + 'T00:00:00+07:00');\ntomorrowDate.setDate(tomorrowDate.getDate() + 1);\nconst tomorrow = dateFormatter.format(tomorrowDate);\n\nreturn [{\n  json: {\n    ...ctx,\n    admin_user_id: admin.id,\n    admin_display_name: admin.display_name ?? null,\n    admin_role: admin.role ?? null,\n    auth_check: {\n      ...(ctx.auth_check ?? {}),\n      supabase_authorized: true,\n    },\n    today,\n    tomorrow,\n  },\n}];\n"
+      },
+      "id": "ios001-0000-0000-0000-000000000004",
+      "name": "Prep snapshot context",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        20,
+        120
+      ]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.SUPABASE_URL + '/rest/v1/bookings?select=id,platform,reservation_number,guest_name_snapshot,check_in_date,check_out_date,nights,room_id,listing_tier,booking_status,booking_status_updated_at,latest_status_signal_source,latest_status_signal_confidence,created_at,rooms(room_code,building,portfolio,listing_tier)&booking_status=not.in.(cancelled,no_show)&or=(check_in_date.eq.' + $json.today + ',check_out_date.eq.' + $json.today + ',and(check_in_date.lt.' + $json.today + ',check_out_date.gt.' + $json.today + '),check_in_date.eq.' + $json.tomorrow + ')&order=check_in_date.asc' }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "={{ $env.SUPABASE_SERVICE_ROLE_KEY }}"
+            },
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.SUPABASE_SERVICE_ROLE_KEY }}"
+            }
+          ]
+        },
+        "options": {
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true
+            }
+          }
+        }
+      },
+      "id": "ios001-0000-0000-0000-000000000005",
+      "name": "GET bookings window",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        460,
+        180
+      ]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.SUPABASE_URL + '/rest/v1/room_status?select=room_id,cleaning_status,occupancy_status,maintenance_status,last_cleaned_at,last_checked_at,notes,updated_at' }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "={{ $env.SUPABASE_SERVICE_ROLE_KEY }}"
+            },
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.SUPABASE_SERVICE_ROLE_KEY }}"
+            }
+          ]
+        },
+        "options": {
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true
+            }
+          }
+        }
+      },
+      "id": "ios001-0000-0000-0000-000000000006",
+      "name": "GET room statuses",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        680,
+        180
+      ]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.SUPABASE_URL + '/rest/v1/booking_draft_sessions?select=id,last_activity_at,status,admin_user_id&status=eq.open&last_activity_at=gte.' + new Date(Date.now() - 30*60*1000).toISOString() + '&order=last_activity_at.desc&limit=10' }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "={{ $env.SUPABASE_SERVICE_ROLE_KEY }}"
+            },
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.SUPABASE_SERVICE_ROLE_KEY }}"
+            }
+          ]
+        },
+        "options": {
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true
+            }
+          }
+        }
+      },
+      "id": "ios001-0000-0000-0000-000000000007",
+      "name": "GET open draft sessions",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        900,
+        180
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const ctx = $('Prep snapshot context').first().json;\nconst bookingBody = $('GET bookings window').first().json.body ?? [];\nconst statusBody = $('GET room statuses').first().json.body ?? [];\nconst draftSessionBody = $('GET open draft sessions').first().json.body ?? [];\nconst caseBody = $('GET open internal ops cases').first().json.body ?? [];\nconst fieldAssistanceBody = $('GET open field assistance tasks').first().json.body ?? [];\nconst cleaningTaskBody = $('GET open cleaning tasks').first().json.body ?? [];\nconst checklistBody = $('GET cleaning checklist items').first().json.body ?? [];\nconst accessPrepBody = $('GET booking access preparations').first().json.body ?? [];\nconst housekeepingQueueBody = $('GET housekeeping queue').first().json.housekeeping_queue ?? [];\nconst roomAccessReadinessBody = $('GET room access readiness').first().json.room_access_readiness ?? [];\n\nconst rawBookings = Array.isArray(bookingBody) ? bookingBody : [];\nconst statuses = Array.isArray(statusBody) ? statusBody : [];\nconst openSessions = Array.isArray(draftSessionBody) ? draftSessionBody : [];\nconst openCases = Array.isArray(caseBody) ? caseBody : [];\nconst fieldAssistanceTasks = Array.isArray(fieldAssistanceBody) ? fieldAssistanceBody : [];\nconst cleaningTasks = Array.isArray(cleaningTaskBody) ? cleaningTaskBody : [];\nconst checklistItems = Array.isArray(checklistBody) ? checklistBody : [];\nconst accessPreparations = Array.isArray(accessPrepBody) ? accessPrepBody : [];\nconst housekeepingQueue = Array.isArray(housekeepingQueueBody) ? housekeepingQueueBody : [];\nconst roomAccessReadiness = Array.isArray(roomAccessReadinessBody) ? roomAccessReadinessBody : [];\n\nconst statusByRoomId = new Map(statuses.map((s) => [s.room_id, s]));\nconst checklistByTaskId = new Map();\nfor (const item of checklistItems) {\n  if (!item.cleaning_task_id) continue;\n  const arr = checklistByTaskId.get(item.cleaning_task_id) ?? [];\n  arr.push(item);\n  checklistByTaskId.set(item.cleaning_task_id, arr);\n}\nconst accessPrepByBookingId = new Map(accessPreparations.filter((p) => p.booking_id).map((p) => [p.booking_id, p]));\nconst bookingById = new Map();\nconst today = ctx.today;\nconst tomorrow = ctx.tomorrow;\nconst platformNames = { booking: 'Booking', agoda: 'Agoda', airbnb: 'Airbnb', direct: 'Direct', line: 'LINE', other: 'Other' };\n\nfunction bookingKey(booking) {\n  if (booking.platform && booking.reservation_number) return booking.platform + '|' + booking.reservation_number;\n  return 'id|' + (booking.id || Math.random().toString(36));\n}\n\nfunction isNewer(next, current) {\n  const nextTime = next.created_at ? Date.parse(next.created_at) : NaN;\n  const currentTime = current.created_at ? Date.parse(current.created_at) : NaN;\n  if (Number.isFinite(nextTime) && Number.isFinite(currentTime)) return nextTime > currentTime;\n  if (Number.isFinite(nextTime) && !Number.isFinite(currentTime)) return false;\n  return false;\n}\n\nfunction dedupeBookings(list) {\n  const groups = new Map();\n  for (const booking of list) {\n    const key = bookingKey(booking);\n    const group = groups.get(key);\n    if (!group) {\n      groups.set(key, { booking, count: 1 });\n      continue;\n    }\n    group.count += 1;\n    if (isNewer(booking, group.booking)) group.booking = booking;\n  }\n  return {\n    bookings: [...groups.values()].map((group) => group.booking),\n    duplicateGroups: [...groups.values()]\n      .filter((group) => group.count > 1)\n      .map((group) => ({ booking: group.booking, count: group.count })),\n  };\n}\n\nconst deduped = dedupeBookings(rawBookings);\nconst bookings = deduped.bookings;\nconst duplicateGroups = deduped.duplicateGroups;\nfor (const booking of bookings) {\n  if (booking.id) bookingById.set(booking.id, booking);\n}\n\nfunction relatedRoom(booking) {\n  return Array.isArray(booking.rooms) ? booking.rooms[0] : booking.rooms;\n}\n\nfunction portfolioOf(booking) {\n  const room = relatedRoom(booking);\n  if (room?.portfolio === 'mom' || booking.listing_tier === 'flex_popularcondo') return 'mom';\n  return 'impact';\n}\n\nfunction roomCodeOf(booking) {\n  const room = relatedRoom(booking);\n  return room?.room_code || 'ห้องยังไม่ระบุ';\n}\n\nfunction roomStatusOf(booking) {\n  return booking.room_id ? statusByRoomId.get(booking.room_id) : null;\n}\n\nfunction missingFor(booking) {\n  const missing = [];\n  if (!booking.room_id) missing.push('ยังไม่มีห้อง');\n  if (booking.check_in_date === today && booking.booking_status === 'confirmed') missing.push('ยังไม่มีสัญญาณ check-in');\n  if (booking.check_out_date === today && booking.booking_status !== 'checked_out') missing.push('ยังไม่มีสัญญาณ check-out');\n  return missing;\n}\n\nfunction row(booking) {\n  const missing = missingFor(booking);\n  const suffix = missing.length ? ' | ขาด: ' + missing.join(', ') : '';\n  return '- ' + [\n    booking.guest_name_snapshot || '-',\n    roomCodeOf(booking),\n    platformNames[booking.platform] || booking.platform || '-',\n    (booking.nights ?? '-') + ' คืน',\n    booking.booking_status || '-',\n  ].join(' | ') + suffix;\n}\n\nfunction section(title, list) {\n  return [title, ...(list.length ? list.map(row) : ['- ไม่มี'])].join('\\n');\n}\n\nfunction titleDate(isoDate) {\n  const [, month, day] = isoDate.split('-').map(Number);\n  const monthNames = ['ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.', 'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.'];\n  return day + ' ' + monthNames[month - 1];\n}\n\nfunction nextActionFor(item) {\n  if (item === 'ยังไม่มีห้อง') return 'เลือกห้องก่อนส่ง room access';\n  if (item.includes('check-in')) return 'ถ้าส่ง room access แล้ว ให้ร่างข้อความถามได้ แต่ระบบยังไม่ auto-send';\n  if (item.includes('check-out')) return 'ถ้าลูกค้าออกแล้ว ให้บันทึกสัญญาณ check-out หรือร่างข้อความถามได้';\n  return 'ตรวจข้อมูลนี้ก่อนดำเนินการต่อ';\n}\n\nfunction duplicateWarningRows() {\n  if (!duplicateGroups.length) return [];\n  return [\n    'พบใบจองซ้ำในระบบ',\n    ...duplicateGroups.map(({ booking, count }) => {\n      const platform = platformNames[booking.platform] || booking.platform || '-';\n      const reservation = booking.reservation_number || booking.id || '-';\n      return '- ' + platform + ' ' + reservation + ': พบ ' + count + ' records, แสดงรายการล่าสุดเท่านั้น';\n    }),\n  ];\n}\n\nfunction needsAttentionRows(scopeBookings) {\n  const rows = [];\n  for (const booking of scopeBookings) {\n    const room = roomCodeOf(booking);\n    const guest = booking.guest_name_snapshot || '-';\n    for (const item of missingFor(booking)) {\n      rows.push('- ' + guest + ' | ' + room + ': ' + item + '\\n  แนะนำ: ' + nextActionFor(item));\n    }\n    const rs = roomStatusOf(booking);\n    const nearCheckIn = booking.check_in_date === today || booking.check_in_date === tomorrow;\n    if (nearCheckIn && (!rs || ['unknown', 'dirty'].includes(rs.cleaning_status))) {\n      const label = !rs || rs.cleaning_status === 'unknown' ? 'ยังไม่บันทึก' : 'ยังไม่สะอาด';\n      rows.push('- ' + room + ': สถานะทำความสะอาด' + label + '\\n  แนะนำ: เช็กห้องและ Access Prep ก่อนส่งข้อมูลเข้าพัก');\n    }\n    if (rs && ['needs_attention', 'blocked'].includes(rs.maintenance_status)) {\n      rows.push('- ' + room + ': maintenance_status = ' + rs.maintenance_status + '\\n  แนะนำ: ตรวจห้องก่อนให้ลูกค้าเข้าพัก');\n    }\n  }\n  if (openSessions.length > 0) {\n    rows.push('- มีชุดรูปใบจองที่ยังค้างอยู่\\n  แนะนำ: ถ้าไม่ใช้แล้วให้ปิดชุดรูป หรือส่งให้ครบแล้วพิมพ์ \"ครบแล้ว\"');\n  }\n  return rows.length ? rows : ['- ไม่มี'];\n}\n\nfunction safe(value, fallback = '-') {\n  if (value === null || value === undefined) return fallback;\n  const text = String(value).trim();\n  return text || fallback;\n}\n\nfunction channelLabel(value) {\n  const labels = {\n    guest_oa: 'Guest OA',\n    internal_ops_oa: 'Internal Ops',\n    housekeeping_oa: 'Housekeeping',\n    booking: 'Booking',\n    agoda: 'Agoda',\n    airbnb: 'Airbnb',\n  };\n  return labels[value] || safe(value);\n}\n\nfunction priorityRank(value) {\n  const ranks = { urgent: 0, high: 1, normal: 2, medium: 2, low: 3 };\n  return ranks[String(value || '').toLowerCase()] ?? 4;\n}\n\nfunction caseUpdatedAt(item) {\n  const time = Date.parse(item.updated_at || item.created_at || '');\n  return Number.isFinite(time) ? time : 0;\n}\n\nfunction caseCardRows() {\n  if (!openCases.length) return ['- ไม่มี open case card'];\n  return openCases\n    .slice()\n    .sort((a, b) => priorityRank(a.priority) - priorityRank(b.priority) || caseUpdatedAt(b) - caseUpdatedAt(a))\n    .slice(0, 5)\n    .flatMap((item) => {\n      const code = safe(item.case_code, 'CASE');\n      const channel = channelLabel(item.channel_target);\n      const platform = item.platform_snapshot ? '/' + safe(item.platform_snapshot) : '';\n      const dates = safe(item.check_in_date_snapshot) + ' -> ' + safe(item.check_out_date_snapshot);\n      const issue = item.visible_card_summary || item.issue_summary || item.latest_guest_message_excerpt || 'รอ admin ตรวจรายละเอียด';\n      return [\n        '- ' + code + ' | ' + safe(item.priority, 'normal') + ' | ' + safe(item.status, 'new'),\n        '  ลูกค้า: ' + safe(item.guest_display_snapshot) + ' | ห้อง: ' + safe(item.room_code_snapshot) + ' | ' + channel + platform,\n        '  วันที่: ' + dates,\n        '  Issue: ' + safe(issue),\n        '  Latest: ' + safe(item.latest_guest_message_excerpt),\n        '  แนะนำ: ' + safe(item.ai_suggestion || item.admin_action_needed, 'ตรวจเคสนี้ก่อนดำเนินการต่อ'),\n        '  Actions: ห้องพร้อมแล้ว / ยังไม่พร้อม / ส่งให้แม่บ้าน / รับเคสเอง / ดูรายละเอียด',\n      ];\n    });\n}\n\nfunction renderFieldAssistanceTasks(tasks) {\n  if (!tasks.length) return [];\n  const lines = ['Field Assistance ด่วน'];\n  const sorted = tasks\n    .slice()\n    .sort((a, b) => priorityRank(a.priority) - priorityRank(b.priority) || caseUpdatedAt(b) - caseUpdatedAt(a))\n    .slice(0, 5);\n  for (const task of sorted) {\n    const ackText = task.ack_status === 'waiting'\n      ? 'รอ Housekeeping รับทราบ'\n      : task.ack_status === 'no_ack'\n        ? 'ยังไม่มีคนรับทราบ'\n        : task.ack_status === 'acknowledged'\n          ? 'มีคนรับทราบแล้ว'\n          : 'ไม่ต้องรอ ack';\n    const dispatchText = task.dispatch_status === 'sent'\n      ? 'ส่ง Housekeeping แล้ว'\n      : task.dispatch_status === 'unconfigured'\n        ? 'ยังไม่มีปลายทาง Housekeeping'\n        : task.dispatch_status === 'failed'\n          ? 'ส่ง Housekeeping ไม่สำเร็จ'\n          : 'รอส่ง Housekeeping';\n    const caseCode = task.internal_ops_cases?.case_code ? ' | ' + task.internal_ops_cases.case_code : '';\n    lines.push('- ' + safe(task.location_label || task.building) + caseCode + ' | ประเภท: field_assistance | ' + dispatchText + ' | ' + ackText);\n  }\n  return lines;\n}\n\nfunction roomOfTask(task) {\n  const room = Array.isArray(task.rooms) ? task.rooms[0] : task.rooms;\n  if (room?.room_code) return room.room_code;\n  const booking = task.booking_id ? bookingById.get(task.booking_id) : null;\n  return booking ? roomCodeOf(booking) : 'ห้องยังไม่ระบุ';\n}\n\nfunction guestOfTask(task) {\n  const booking = task.booking_id ? bookingById.get(task.booking_id) : null;\n  return booking?.guest_name_snapshot || '-';\n}\n\nfunction cleaningStatusLabel(value) {\n  const labels = {\n    pending_dispatch: 'รอส่งงาน',\n    waiting_ack: 'ยังไม่รับทราบ',\n    acknowledged: 'รับทราบแล้ว',\n    in_progress: 'กำลังทำ',\n    blocked: 'ติดปัญหา',\n    completed: 'เสร็จแล้ว',\n    delivery_failed: 'ส่งงานไม่สำเร็จ',\n    no_ack: 'ยังไม่มีคนรับทราบ',\n    canceled: 'ยกเลิก',\n  };\n  return labels[value] || 'อยู่ระหว่างดำเนินการ';\n}\n\nfunction checklistLabel(item) {\n  const labels = {\n    room_cleaned: 'ทำความสะอาด',\n    bedsheet: 'ผ้าปูที่นอน',\n    towels: 'ผ้าขนหนู',\n    water: 'น้ำ',\n    tissue: 'ทิชชู่',\n    soap: 'สบู่',\n  };\n  return item.item_label || labels[item.item_key] || 'รายการเช็กลิสต์';\n}\n\nfunction missingItemsForTask(task) {\n  return (checklistByTaskId.get(task.id) ?? [])\n    .filter((item) => item.status === 'missing')\n    .map(checklistLabel);\n}\n\nfunction checklistProgressForTask(task) {\n  const items = checklistByTaskId.get(task.id) ?? [];\n  if (!items.length) return 'เช็กลิสต์ยังไม่มีข้อมูล';\n  const present = items.filter((item) => item.status === 'present').length;\n  return 'เช็กลิสต์ ' + present + '/' + items.length;\n}\n\nfunction accessPrepForTask(task) {\n  if (task.booking_id && accessPrepByBookingId.has(task.booking_id)) return accessPrepByBookingId.get(task.booking_id);\n  return null;\n}\n\nfunction accessPrepLabel(prep) {\n  if (!prep) return 'Access Prep: ยังไม่มีข้อมูล';\n  const key = prep.key_placed_in_room ? 'วางกุญแจแล้ว' : 'ยังไม่วางกุญแจ';\n  const open = prep.room_left_unlocked_or_open ? 'เปิดห้องแล้ว' : 'ยังไม่เปิดห้อง';\n  return 'Access Prep: ' + key + ' · ' + open;\n}\n\nfunction housekeepingRows() {\n  if (!cleaningTasks.length) {\n    return ['- ยังไม่มีงานแม่บ้านที่เปิดอยู่จากระบบ cleaning_tasks ตอนนี้'];\n  }\n  return cleaningTasks\n    .slice()\n    .sort((a, b) => priorityRank(a.priority) - priorityRank(b.priority) || caseUpdatedAt(b) - caseUpdatedAt(a))\n    .slice(0, 8)\n    .flatMap((task) => {\n      const missing = missingItemsForTask(task);\n      const lines = [\n        '- ' + roomOfTask(task) + ' | ' + guestOfTask(task) + ' | ' + cleaningStatusLabel(task.status) + ' | ' + checklistProgressForTask(task),\n        '  ' + accessPrepLabel(accessPrepForTask(task)),\n      ];\n      if (missing.length) lines.push('  ขาด: ' + missing.join(', '));\n      if (task.blocker_reason) lines.push('  ติดปัญหา: ' + safe(task.blocker_reason));\n      return lines;\n    });\n}\n\nfunction housekeepingStatusLabel(status) {\n  const labels = {\n    pending_dispatch: 'รอส่งงาน',\n    waiting_ack: 'ยังไม่รับงาน',\n    sent: 'รอรับทราบ',\n    acknowledged: 'รับทราบแล้ว',\n    in_progress: 'กำลังทำ',\n    blocked: 'ติดปัญหา',\n    no_ack: 'ไม่ตอบรับ',\n    completed: 'Cleaning Ready',\n    done: 'Access Prep Ready',\n    delivery_failed: 'ส่งงานไม่สำเร็จ',\n    canceled: 'ยกเลิก',\n    new: 'รอส่งงาน',\n  };\n  return labels[status] || 'ไม่ทราบสถานะ';\n}\n\nfunction housekeepingTruthRows() {\n  const queueItems = housekeepingQueue.flatMap((entry) =>\n    Array.isArray(entry?.items) ? entry.items : []\n  );\n  if (!queueItems.length) return housekeepingRows();\n  return queueItems.slice(0, 12).flatMap((task) => {\n    const kind = task.task_kind === 'access_prep' ? 'Access Prep' : 'Cleaning';\n    const owner = safe(task.owner_label, 'ยังไม่ระบุผู้รับผิดชอบ');\n    const lines = [\n      '- ' + kind + ' | ' + safe(task.room_code, 'ไม่ระบุห้อง') + ' | ' +\n        housekeepingStatusLabel(task.status) + ' | ผู้รับผิดชอบ: ' + owner,\n    ];\n    if (Array.isArray(task.missing_items) && task.missing_items.length) {\n      lines.push('  ขาด: ' + task.missing_items.join(', '));\n    }\n    if (task.key_custody) lines.push('  กุญแจ: ' + safe(task.key_custody));\n    if (task.blocker_reason) lines.push('  ติดปัญหา: ' + safe(task.blocker_reason));\n    if (task.linked_task_status) {\n      lines.push('  งานที่เชื่อมกัน: ' + housekeepingStatusLabel(task.linked_task_status));\n    }\n    return lines;\n  });\n}\n\nfunction roomReadinessRows() {\n  if (!roomAccessReadiness.length) return ['- ยังไม่มีผล get_room_access_readiness'];\n  return roomAccessReadiness.slice(0, 12).map((readiness) => {\n    const booking = bookingById.get(readiness.booking_id);\n    const room = booking ? roomCodeOf(booking) : 'ไม่ระบุห้อง';\n    const blockers = Array.isArray(readiness.blockers) && readiness.blockers.length\n      ? readiness.blockers.join(', ')\n      : 'ไม่มี';\n    return '- ' + room +\n      ' | Cleaning: ' + (readiness.cleaning_ready ? 'พร้อม' : 'ยังไม่พร้อม') +\n      ' | Access Prep: ' + (readiness.access_prep_ready ? 'พร้อม' : 'ยังไม่พร้อม') +\n      ' | Guest OA: ' + (readiness.ready ? 'ส่งข้อมูลเข้าห้องได้' : 'ยังบล็อก') +\n      ' | เหตุผล: ' + blockers;\n  });\n}\n\nfunction block(label, scope) {\n  const scopeBookings = bookings.filter((b) => portfolioOf(b) === scope);\n  const checkIn = scopeBookings.filter((b) => b.check_in_date === today);\n  const staying = scopeBookings.filter((b) => b.check_in_date < today && b.check_out_date > today);\n  const checkOut = scopeBookings.filter((b) => b.check_out_date === today);\n  const tomorrowCheckIn = scopeBookings.filter((b) => b.check_in_date === tomorrow);\n  return [\n    label,\n    section('เช็กอินวันนี้', checkIn),\n    '',\n    section('พักอยู่วันนี้', staying),\n    '',\n    section('เช็กเอาต์วันนี้', checkOut),\n    '',\n    section('เช็กอินพรุ่งนี้', tomorrowCheckIn),\n  ].join('\\n');\n}\n\nconst duplicateWarnings = duplicateWarningRows();\nfunction buildFullReply() {\n  return [\n  'สรุปวันนี้ ' + titleDate(today),\n  '',\n  'ต้องดูแล',\n  ...needsAttentionRows(bookings),\n  '',\n  ...renderFieldAssistanceTasks(fieldAssistanceTasks),\n  ...(fieldAssistanceTasks.length ? [''] : []),\n  'Case Cards',\n  ...caseCardRows(),\n  '',\n  block('Impact Arena Condo', 'impact'),\n  '',\n  block('Popular Condo / Mom Portfolio', 'mom'),\n  '',\n  'Housekeeping',\n  ...housekeepingTruthRows(),\n  '',\n  'Room Access Readiness',\n  ...roomReadinessRows(),\n  ...(duplicateWarnings.length ? ['', ...duplicateWarnings] : []),\n  '',\n  'อ้างอิงเฉพาะ booking ที่บันทึกในระบบตอนนี้ค่ะ',\n  ].join('\\n');\n}\n\nfunction buildHousekeepingReply() {\n  const fieldLines = renderFieldAssistanceTasks(fieldAssistanceTasks);\n  return [\n    'สถานะแม่บ้านตอนนี้ ' + titleDate(today),\n    '',\n    'งานแม่บ้านที่เปิดอยู่',\n    ...housekeepingTruthRows(),\n    '',\n    'ความพร้อมเข้าห้อง',\n    ...roomReadinessRows(),\n    '',\n    ...(fieldLines.length ? fieldLines : ['Field Assistance ด่วน', '- ไม่มี']),\n  ].join('\\n');\n}\n\nfunction buildCheckInOutReply() {\n  const impactBookings = bookings.filter((b) => portfolioOf(b) === 'impact');\n  const momBookings = bookings.filter((b) => portfolioOf(b) === 'mom');\n  const signalRows = [];\n  for (const booking of bookings) {\n    const missing = missingFor(booking).filter((item) => item.includes('check-in') || item.includes('check-out'));\n    for (const item of missing) {\n      signalRows.push('- ' + safe(booking.guest_name_snapshot) + ' | ' + roomCodeOf(booking) + ': ' + item + '\\n  แนะนำ: ' + nextActionFor(item));\n    }\n  }\n  return [\n    'เช็กอิน/เช็กเอาต์วันนี้ ' + titleDate(today),\n    '',\n    block('Impact Arena Condo', 'impact'),\n    '',\n    block('Popular Condo / Mom Portfolio', 'mom'),\n    '',\n    'ต้องดูแลจากสัญญาณ check-in/check-out',\n    ...(signalRows.length ? signalRows : ['- ไม่มีสัญญาณ check-in/check-out ที่ค้างจากข้อมูลตอนนี้']),\n    '',\n    'อ้างอิงเฉพาะ booking ที่บันทึกในระบบตอนนี้ค่ะ',\n  ].join('\\n');\n}\n\nconst snapshotView = ctx.snapshot_view === 'housekeeping' || ctx.snapshot_view === 'check_in_out'\n  ? ctx.snapshot_view\n  : 'full';\nconst replyText = snapshotView === 'housekeeping'\n  ? buildHousekeepingReply()\n  : snapshotView === 'check_in_out'\n    ? buildCheckInOutReply()\n    : buildFullReply();\n\nreturn [{\n  json: {\n    ...ctx,\n    bookings,\n    open_cases: openCases,\n    field_assistance_tasks: fieldAssistanceTasks,\n    cleaning_tasks: cleaningTasks,\n    cleaning_checklist_items: checklistItems,\n    access_preparations: accessPreparations,\n    housekeeping_queue: housekeepingQueue,\n    room_access_readiness: roomAccessReadiness,\n    room_statuses: statuses,\n    open_draft_sessions: openSessions,\n    evidence_contract: {\n      version: 'phase4-daily-ops-v1',\n      room_readiness_separate_from_access_prep: true,\n      sources: ['bookings', 'room_statuses', 'internal_ops_cases', 'field_assistance_tasks', 'cleaning_tasks', 'cleaning_task_checklist_items', 'booking_access_preparations', 'get_housekeeping_queue', 'get_room_access_readiness'],\n    },\n    reply: {\n      channel: 'internal_ops_oa',\n      to: ctx.line_user_id,\n      text: replyText,\n      conversation_id: ctx.conversation_id,\n      source_event_id: ctx.source_event_id,\n      correlation_id: ctx.correlation_id,\n      reply_token_ephemeral: ctx.reply_token_ephemeral,\n    },\n  },\n}];\n"
+      },
+      "id": "ios001-0000-0000-0000-000000000008",
+      "name": "Build snapshot reply",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2660,
+        180
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.IMPACT_LINE_SEND_TEXT_URL || 'https://cxegpsckdjopzpwrlxyr.supabase.co/functions/v1/line-webhook-gateway/line/send-text' }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "x-impact-webhook-secret",
+              "value": "={{ $env.N8N_WEBHOOK_SECRET }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ $json.reply }}",
+        "options": {}
+      },
+      "id": "ios001-0000-0000-0000-000000000009",
+      "name": "Send snapshot reply",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2880,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "p4-s0-if-validate-no-access",
+              "leftValue": "={{ $json.no_access === true }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "p4-s0-if-validate-no-access",
+      "name": "IF no access from env",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        -620,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "p4-s0-if-admin-no-access",
+              "leftValue": "={{ $json.no_access === true }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "p4-s0-if-admin-no-access",
+      "name": "IF no access after admin lookup",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        240,
+        0
+      ]
+    },
+    {
+      "id": "p4-s1-get-open-internal-ops-cases",
+      "name": "GET open internal ops cases",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1120,
+        180
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.SUPABASE_URL + '/rest/v1/internal_ops_cases?select=id,case_code,case_type,priority,status,guest_display_snapshot,room_code_snapshot,check_in_date_snapshot,check_out_date_snapshot,channel_target,platform_snapshot,latest_guest_message_excerpt,issue_summary,ai_suggestion,admin_action_needed,visible_card_summary,created_at,updated_at&status=not.in.(resolved,closed)&order=updated_at.desc&limit=10' }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "={{ $env.SUPABASE_SERVICE_ROLE_KEY }}"
+            },
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.SUPABASE_SERVICE_ROLE_KEY }}"
+            }
+          ]
+        },
+        "options": {
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "p4-s22-get-open-field-assistance-tasks",
+      "name": "GET open field assistance tasks",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1340,
+        180
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.SUPABASE_URL + '/rest/v1/field_assistance_tasks?select=id,building,location_label,priority,status,dispatch_status,ack_status,source_text,created_at,internal_ops_cases(case_code)&status=not.in.(resolved,closed)&order=created_at.desc&limit=10' }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "={{ $env.SUPABASE_SERVICE_ROLE_KEY }}"
+            },
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.SUPABASE_SERVICE_ROLE_KEY }}"
+            }
+          ]
+        },
+        "options": {
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "p4-s3-get-open-cleaning-tasks",
+      "name": "GET open cleaning tasks",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1560,
+        180
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.SUPABASE_URL + '/rest/v1/cleaning_tasks?select=id,task_key,room_id,booking_id,task_type,priority,status,dispatch_status,checklist_status,assigned_housekeeper_id,due_at,ack_due_at,dispatched_at,acknowledged_at,started_at,completed_at,blocker_reason,created_at,updated_at,rooms(room_code,building)&status=not.in.(completed,canceled)&order=created_at.desc&limit=20' }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "={{ $env.SUPABASE_SERVICE_ROLE_KEY }}"
+            },
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.SUPABASE_SERVICE_ROLE_KEY }}"
+            }
+          ]
+        },
+        "options": {
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "p4-s3-get-cleaning-checklist-items",
+      "name": "GET cleaning checklist items",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1780,
+        180
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.SUPABASE_URL + '/rest/v1/cleaning_task_checklist_items?select=id,cleaning_task_id,room_id,item_key,item_label,required,status,issue_note,exception_reason&order=item_key.asc&limit=200' }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "={{ $env.SUPABASE_SERVICE_ROLE_KEY }}"
+            },
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.SUPABASE_SERVICE_ROLE_KEY }}"
+            }
+          ]
+        },
+        "options": {
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "p4-s3-get-booking-access-preparations",
+      "name": "GET booking access preparations",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2000,
+        180
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.SUPABASE_URL + '/rest/v1/booking_access_preparations?select=id,booking_id,room_id,key_placed_in_room,room_left_unlocked_or_open,status,note,updated_at&order=updated_at.desc&limit=100' }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "={{ $env.SUPABASE_SERVICE_ROLE_KEY }}"
+            },
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.SUPABASE_SERVICE_ROLE_KEY }}"
+            }
+          ]
+        },
+        "options": {
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "p6-get-housekeeping-queue",
+      "name": "GET housekeeping queue",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2220,
+        180
+      ],
+      "parameters": {
+        "jsCode": "const n8nContext = this;\nasync function request(path, body = null) {\n  const response = await n8nContext.helpers.httpRequest({\n    method: body ? 'POST' : 'GET',\n    url: $env.SUPABASE_URL + '/rest/v1' + path,\n    headers: {\n      apikey: $env.SUPABASE_SERVICE_ROLE_KEY,\n      Authorization: 'Bearer ' + $env.SUPABASE_SERVICE_ROLE_KEY,\n      'Content-Type': 'application/json',\n    },\n    ...(body ? { body, json: true } : {}),\n    returnFullResponse: true,\n  });\n  return response.body ?? response;\n}\n\nconst housekeepers = await request(\n  '/housekeepers?select=id,display_name&status=eq.active&active=eq.true&order=approved_at.asc,id.asc&limit=20'\n);\nconst queue = [];\nfor (const housekeeper of Array.isArray(housekeepers) ? housekeepers : []) {\n  const page = await request('/rpc/get_housekeeping_queue', {\n    p_housekeeper_id: housekeeper.id,\n    p_view: 'all',\n    p_limit: 5,\n    p_cursor: null,\n  });\n  queue.push({\n    housekeeper_id: housekeeper.id,\n    housekeeper_name: housekeeper.display_name ?? 'ไม่ระบุ',\n    items: Array.isArray(page?.items) ? page.items : [],\n  });\n}\nreturn [{ json: { housekeeping_queue: queue } }];\n"
+      }
+    },
+    {
+      "id": "p6-get-room-access-readiness",
+      "name": "GET room access readiness",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2440,
+        180
+      ],
+      "parameters": {
+        "jsCode": "const n8nContext = this;\nconst bookingResponse = $('GET bookings window').first().json.body ?? [];\nconst bookings = Array.isArray(bookingResponse) ? bookingResponse : [];\nconst readiness = [];\nfor (const booking of bookings) {\n  if (!booking?.id) continue;\n  try {\n    const response = await n8nContext.helpers.httpRequest({\n      method: 'POST',\n      url: $env.SUPABASE_URL + '/rest/v1/rpc/get_room_access_readiness',\n      headers: {\n        apikey: $env.SUPABASE_SERVICE_ROLE_KEY,\n        Authorization: 'Bearer ' + $env.SUPABASE_SERVICE_ROLE_KEY,\n        'Content-Type': 'application/json',\n      },\n      body: { p_booking_id: booking.id },\n      json: true,\n      returnFullResponse: true,\n    });\n    readiness.push(response.body ?? response);\n  } catch (_) {\n    readiness.push({\n      booking_id: booking.id,\n      ready: false,\n      cleaning_ready: false,\n      access_prep_ready: false,\n      blockers: ['readiness_unknown'],\n    });\n  }\n}\nreturn [{ json: { room_access_readiness: readiness } }];\n"
+      }
+    }
+  ],
+  "connections": {
+    "Receive snapshot trigger": {
+      "main": [
+        [
+          {
+            "node": "Validate and extract snapshot",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate and extract snapshot": {
+      "main": [
+        [
+          {
+            "node": "IF no access from env",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF no access from env": {
+      "main": [
+        [
+          {
+            "node": "Send snapshot reply",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "GET authorized admin user",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "GET authorized admin user": {
+      "main": [
+        [
+          {
+            "node": "Prep snapshot context",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prep snapshot context": {
+      "main": [
+        [
+          {
+            "node": "IF no access after admin lookup",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF no access after admin lookup": {
+      "main": [
+        [
+          {
+            "node": "Send snapshot reply",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "GET bookings window",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "GET bookings window": {
+      "main": [
+        [
+          {
+            "node": "GET room statuses",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "GET room statuses": {
+      "main": [
+        [
+          {
+            "node": "GET open draft sessions",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "GET open draft sessions": {
+      "main": [
+        [
+          {
+            "node": "GET open internal ops cases",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "GET open internal ops cases": {
+      "main": [
+        [
+          {
+            "node": "GET open field assistance tasks",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "GET open field assistance tasks": {
+      "main": [
+        [
+          {
+            "node": "GET open cleaning tasks",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "GET open cleaning tasks": {
+      "main": [
+        [
+          {
+            "node": "GET cleaning checklist items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "GET cleaning checklist items": {
+      "main": [
+        [
+          {
+            "node": "GET booking access preparations",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "GET booking access preparations": {
+      "main": [
+        [
+          {
+            "node": "GET housekeeping queue",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "GET housekeeping queue": {
+      "main": [
+        [
+          {
+            "node": "GET room access readiness",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "GET room access readiness": {
+      "main": [
+        [
+          {
+            "node": "Build snapshot reply",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build snapshot reply": {
+      "main": [
+        [
+          {
+            "node": "Send snapshot reply",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "meta": null,
+  "pinData": null,
+  "triggerCount": 1,
+  "tags": [],
+  "shared": [
+    {
+      "updatedAt": "2026-06-01T01:08:15.357Z",
+      "createdAt": "2026-06-01T01:08:15.357Z",
+      "role": "workflow:owner",
+      "workflowId": "impact-internal-ops-snapshot",
+      "projectId": "GH65uJ0CvhoWANFH",
+      "project": {
+        "updatedAt": "2026-06-01T05:44:58.458Z",
+        "createdAt": "2026-05-26T14:40:38.531Z",
+        "id": "GH65uJ0CvhoWANFH",
+        "name": "BOND CITY <jintaphonteosuwan@gmail.com>",
+        "type": "personal",
+        "icon": null,
+        "description": null,
+        "creatorId": "04f39910-8b59-4048-a2a3-0528a83ea935"
+      }
+    }
+  ],
+  "versionMetadata": {
+    "name": null,
+    "description": null
+  }
+}
