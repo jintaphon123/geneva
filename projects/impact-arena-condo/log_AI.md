@@ -29,9 +29,9 @@ This log tracks all codebase changes, architectural decisions, user agreements, 
   - Created `scratch/phase6_housekeeping_baseline.test.py` to run all existing test suites sequentially.
   - Executed the baseline verifier successfully.
 - **Deno version**: Deno 2.7.14
-- **n8n version**: n8n 2.21.7 (cli command not found, using verified target stack version)
+- **n8n target stack version**: n8n 2.21.7 (runtime CLI was unavailable; version is from the locked Phase 4/6 planning baseline)
 - **Test results**:
-  - `deno test` -> 46 passed, 0 failed
+  - `deno test` -> 54 passed, 0 failed
   - `scratch/phase4_housekeeping_action.test.mjs` -> Passed
   - `scratch/phase4_housekeeping_escalation_monitor.test.mjs` -> Passed
   - `scratch/phase4_internal_ops_agent_harness.test.mjs` -> Passed
@@ -53,6 +53,22 @@ This log tracks all codebase changes, architectural decisions, user agreements, 
   - `wf_line_gateway_ingest.json`: b2bd90318c1869749a20288d22f6b152f755f199b3cb42fa115855c3cbe5e4e0
   - `wf_operational_incident_dispatcher.json`: b13d04847a01e7c2322f7ce2436bb6ee1f9611734b7f14c135e67c50f458a6cf
   - `wf_takeover_monitor.json`: e4054bb3e292bf85b78271ceb3f235d8b63156435bd58b8a0a13e7fe168fa4d8
+
+### 2026-06-19 13:47 +0700 - Codex Review: Phase 6 Task 0 Baseline Accepted With Evidence Corrections
+
+- **Review scope**: Antigravity commit `afbed7e93ce39f8f80c3e0aee66c845b08f09f16`.
+- **Corrections made by Codex**:
+  - Removed trailing whitespace introduced when `log_AI.md` became tracked.
+  - Corrected Deno baseline count from 46 to 54 passed.
+  - Clarified that n8n 2.21.7 is the target stack version, not a runtime CLI result.
+- **Codex verification commands**:
+  - `git diff HEAD --check` -> passed after whitespace cleanup.
+  - `python3 -m py_compile scratch/phase6_housekeeping_baseline.test.py` -> passed.
+  - `deno --version` -> `deno 2.7.14`.
+  - `n8n --version` -> command not found.
+  - `docker exec n8n n8n --version` -> Docker daemon unavailable.
+  - `python3 scratch/phase6_housekeeping_baseline.test.py` -> `PHASE 6 HOUSEKEEPING BASELINE PASSED`.
+- **Security check**: Targeted secret scan of `log_AI.md` and `scratch/phase6_housekeeping_baseline.test.py` found no raw key/token matches.
 
 
 ### 2026-06-12 11:45 +07 - Documentation Cleanup: Canonical Handoff Confirmed
@@ -1545,7 +1561,7 @@ Awaiting Codex review and permission to proceed to Task 4.
 1. **Schema Completion:** Added `last_confirmed_by`, robust audit table `guest_stay_memory_events` for full event history, and established `conversation_id` foreign key referencing `public.conversations` ON DELETE CASCADE.
 2. **Extraction Scope:** Expanded `phase5_guest_memory_extraction.mjs` to include `parking_mode`, `arrival_state`, `check_in_state`, and `check_out_state` as per batch 1 plan.
 3. **Canonical Payload:** Extraction logic now returns an explicit DB-ready contract containing `action` (insert_and_supersede), `source_message_id`, `actor`, `timestamp`, `old_value`, and `supersedes_memory_id`.
-4. **Verification Evidence:** 
+4. **Verification Evidence:**
    - Wrote comprehensive python script `scratch/phase5_slice1_schema.test.py` querying linked Supabase using `db query`.
    - Executed `npx supabase db push` successfully to the remote linked database.
    - Run verification tests, all Passed:
@@ -1623,7 +1639,7 @@ Awaiting Codex review and permission to proceed to Task 6 (Integrate with Guest 
   - If a case or room is focused, the system resolves the active booking and `conversation_id`.
   - Calls `phase5_get_active_memory` RPC.
   - Injects `active_guest_memory` and `guest_stay_summary` directly into the admin's `focus` object.
-- **Verification Output:** 
+- **Verification Output:**
   - `node scratch/phase4_internal_ops_agent_harness.test.mjs` -> `All 31 tests passed.`
   - Deployed `impact-internal-ops-agent-harness` to live SQLite via `deploy_harness.py`.
 
@@ -1861,7 +1877,7 @@ Phase 5 Slice 1 is now effectively complete.
 
 - Antigravity executed the final slice closeout checklist:
   - Task 9 (Cross-Surface Visibility Rules): Modified `phase5_get_active_memory` in `20260612164000_phase5_slice1_memory_rpcs_visibility.sql` to strictly scope returned memory based on `p_surface`. Housekeeping is now restricted from viewing broad guest conversational context (returning only operational fields like `arrival_state`, `travel_mode`, `parking_mode`, `physical_requests`), while Guest OA and Internal Ops retain full context. Tested and proven via `scratch/phase5_visibility.test.py`.
-  - Task 10 (Verification): 
+  - Task 10 (Verification):
     - Ran all core automated test suites (Visibility, Memory Extraction, Retrieval, Summary, Internal Ops Harness, Guest Concierge Regression). Result: All passed.
     - Exporting/comparing live workflows was evaluated as N/A since this final batch intentionally did not touch or modify any `wf_*.json` logic, only Supabase RPCs. The workflows remain locked and untouched as per Task 8/Codex's prior run.
   - Task 11 (Real LINE Definition of Done): Documented the test script and provided the exact Definition of Done commands in `walkthrough.md` for Bond to execute on live devices (Internal reset -> Guest test conversation sequence -> Internal inspection/correction -> Internal reset).
@@ -3025,7 +3041,7 @@ Phase 5 Slice 1 is now effectively complete.
   - Output:
     ```
     Running full conversation audit assertions...
-    STDOUT: 
+    STDOUT:
     STDERR: Traceback (most recent call last):
       File "/Users/jintaphon/Documents/Code/MyBrain/projects/impact-arena-condo/scratch/phase5_full_conversation_audit.py", line 777, in <module>
         COMMANDS[sys.argv[1]]()
