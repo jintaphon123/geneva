@@ -4,10 +4,20 @@ import sys
 import json
 import subprocess
 
+SUPABASE_BIN = os.environ.get("SUPABASE_BIN", "/opt/homebrew/bin/supabase")
+
 def run_db_query(sql):
     cwd = "/Users/jintaphon/Documents/Code/MyBrain/projects/impact-arena-condo/runtime/supabase"
-    cmd = ["npx", "supabase", "db", "query", "--linked", "-o", "json", sql]
-    result = subprocess.run(cmd, cwd=cwd, capture_output=True, text=True)
+    cmd = [SUPABASE_BIN, "db", "query", "--linked", "-o", "json", sql]
+    env = os.environ.copy()
+    env["SUPABASE_TELEMETRY_DISABLED"] = "1"
+    result = subprocess.run(
+        cmd,
+        cwd=cwd,
+        capture_output=True,
+        text=True,
+        env=env,
+    )
     if result.returncode != 0:
         print(f"SQL execution error: {result.stderr}", file=sys.stderr)
         return []

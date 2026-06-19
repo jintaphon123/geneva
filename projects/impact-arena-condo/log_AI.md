@@ -3630,3 +3630,61 @@ Phase 5 Slice 1 is now effectively complete.
     not expected to type commands
 - Canonical design:
   `docs/superpowers/specs/2026-06-19-phase6-housekeeping-line-room-readiness-execution-design.md`
+
+## 2026-06-19 — Phase 6 Task 2 Transactional Access Prep State Service
+
+- Added focused Access Prep adapters:
+  - `handleAccessPrepTransition`
+  - `createOrMergeAccessPrepTask`
+  - `overrideHousekeepingTask`
+- Added service-role-only transactional RPCs:
+  - `merge_access_prep_task`
+  - `apply_access_prep_task_action`
+  - `override_housekeeping_task`
+- Access Prep now owns its own lifecycle and event ledger:
+  - `new -> sent -> no_ack -> acknowledged -> in_progress -> done`
+  - blocked/restart, cancellation, key custody, capability denial, and event
+    replay are handled in the Access Prep state service.
+  - key placement alone keeps the task `in_progress`; room-open evidence plus
+    key placement completes the task.
+- Removed the old behavior that resolved key/open actions by searching recently
+  completed Cleaning Tasks.
+- Preserved the Phase 5 safety contract without restoring Cleaning mutation:
+  a focused Cleaning Task with denied access capability still returns
+  `capability_denied`, creates the existing security incident path, and does
+  not mutate `booking_access_preparations`.
+- Migration:
+  `runtime/supabase/supabase/migrations/20260619074056_phase6_housekeeping_queue_and_override.sql`
+  was applied to the linked Supabase project.
+- Adversarial review added
+  `runtime/supabase/supabase/migrations/20260619080833_phase6_access_prep_state_hardening.sql`:
+  - duplicate source events are serialized with transaction advisory locks
+    before replay checks
+  - direct updates with a different task key merge into the existing active
+    Access Prep task for the same booking
+  - internal implementation RPCs are executable only by `postgres`; the public
+    wrappers remain limited to `service_role` and `postgres`
+- Verification:
+  - Deno Access Prep and state tests: `26 passed, 0 failed`.
+  - Linked-database rollback smoke covered merge, dispatch, acknowledgement,
+    start, key placement, room-open completion, duplicate-event replay,
+    capability denial, owner override, and same-booking/different-key merge.
+  - `python3 scratch/phase6_access_prep_schema.test.py`:
+    `RESULT: PASS`.
+  - Supabase catalog confirmed all three RPCs use `SECURITY DEFINER`,
+    `search_path=public, pg_temp`, transaction advisory locks, and grant execute
+    only to `postgres` and `service_role`.
+  - Supabase advisors returned only the four pre-existing Phase 4/5 warnings;
+    no new Task 2 warning was introduced.
+  - `python3 scratch/phase6_housekeeping_baseline.test.py`:
+    `PHASE 6 HOUSEKEEPING BASELINE PASSED`.
+    Housekeeping Deno tests were `55 passed, 0 failed`; Internal Ops harness was
+    `46 passed, 0 failed`; Phase 5 access-capability integration passed.
+- Test harness hardening:
+  `scratch/phase6_access_prep_schema.test.py` now supports `SUPABASE_BIN` and
+  defaults to the installed Supabase CLI instead of relying on `npx` registry
+  resolution.
+- Task 3 planning note:
+  the Task 2 migration is already applied remotely. Queue SQL for Task 3 must
+  be generated in a new migration; do not edit the applied Task 2 migration
+  and expect `supabase db push` to replay it.
