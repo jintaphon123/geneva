@@ -90,14 +90,14 @@ GRANT ALL ON TABLE public.access_prep_task_events TO postgres, service_role;
 
 -- --- Create Indexes ---
 -- Open assigned tasks
-CREATE INDEX IF NOT EXISTS idx_access_prep_tasks_assigned_status 
+CREATE INDEX IF NOT EXISTS idx_access_prep_tasks_assigned_status
   ON public.access_prep_tasks(assigned_housekeeper_id, status);
 
 -- Acknowledgement deadlines
-CREATE INDEX IF NOT EXISTS idx_access_prep_tasks_ack_due 
-  ON public.access_prep_tasks(ack_due_at) 
+CREATE INDEX IF NOT EXISTS idx_access_prep_tasks_ack_due
+  ON public.access_prep_tasks(ack_due_at)
   WHERE status = 'sent';
 
 -- Due work
-CREATE INDEX IF NOT EXISTS idx_access_prep_tasks_due_at 
+CREATE INDEX IF NOT EXISTS idx_access_prep_tasks_due_at
   ON public.access_prep_tasks(due_at);

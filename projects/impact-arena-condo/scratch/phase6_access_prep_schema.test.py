@@ -31,7 +31,7 @@ def run_tests():
     """
     rows = run_db_query(sql_tables)
     found_tables = {r["table_name"] for r in rows}
-    
+
     expected_tables = {"access_prep_tasks", "access_prep_task_events"}
     for table in expected_tables:
         if table in found_tables:
@@ -39,10 +39,6 @@ def run_tests():
         else:
             print(f"[FAIL] Table '{table}' is MISSING.")
             failed = True
-
-    if failed:
-        print("\nSummary: RED test failed as expected (or schema missing).")
-        sys.exit(1)
 
     # 2. Check nullability, types, and columns on access_prep_tasks
     print("\n--- 2. Column Verification ---")
@@ -53,7 +49,7 @@ def run_tests():
     """
     cols = run_db_query(sql_cols)
     col_map = {r["column_name"]: r for r in cols}
-    
+
     required_cols = [
         "id", "task_key", "booking_id", "room_id", "internal_ops_case_id",
         "assigned_housekeeper_id", "owner_admin_user_id", "priority", "status",
@@ -62,13 +58,33 @@ def run_tests():
         "blocker_reason", "instructions", "notes", "override_reason",
         "overridden_by", "overridden_at", "created_at", "updated_at"
     ]
-    
+
     for c in required_cols:
         if c in col_map:
             print(f"[PASS] Column '{c}' exists in access_prep_tasks.")
         else:
             print(f"[FAIL] Column '{c}' is MISSING in access_prep_tasks.")
             failed = True
+
+    # Check access_prep_task_events columns and source_event_id NOT NULL
+    sql_cols_events = """
+    SELECT column_name, is_nullable, data_type
+    FROM information_schema.columns
+    WHERE table_schema = 'public' AND table_name = 'access_prep_task_events';
+    """
+    cols_events = run_db_query(sql_cols_events)
+    col_map_events = {r["column_name"]: r for r in cols_events}
+
+    if "source_event_id" in col_map_events:
+        is_nullable = col_map_events["source_event_id"]["is_nullable"]
+        if is_nullable == "NO":
+            print("[PASS] Column 'access_prep_task_events.source_event_id' is NOT NULL.")
+        else:
+            print("[FAIL] Column 'access_prep_task_events.source_event_id' is NULLABLE.")
+            failed = True
+    else:
+        print("[FAIL] Column 'access_prep_task_events.source_event_id' is MISSING.")
+        failed = True
 
     # 3. Check CHECK constraints
     print("\n--- 3. CHECK Constraints Verification ---")
@@ -81,7 +97,7 @@ def run_tests():
     """
     check_rows = run_db_query(sql_check)
     check_defs = {r["constraint_name"]: r["constraint_definition"] for r in check_rows}
-    
+
     # Check priority check
     priority_check = [name for name, definition in check_defs.items() if "priority" in definition]
     if priority_check:
@@ -89,7 +105,7 @@ def run_tests():
     else:
         print("[FAIL] priority check constraint is MISSING.")
         failed = True
-        
+
     # Check status check
     status_check = [name for name, definition in check_defs.items() if "status" in definition and "done" in definition]
     if status_check:
@@ -97,7 +113,7 @@ def run_tests():
     else:
         print("[FAIL] status check constraint is MISSING.")
         failed = True
-        
+
     # Check key_custody check
     key_custody_check = [name for name, definition in check_defs.items() if "key_custody" in definition]
     if key_custody_check:
@@ -118,7 +134,7 @@ def run_tests():
     """
     fk_rows = run_db_query(sql_fk)
     behavior_map = {'c': 'CASCADE', 'n': 'SET NULL', 'a': 'NO ACTION', 'r': 'RESTRICT'}
-    
+
     expected_fks = [
         {"table": "access_prep_tasks", "ref": "bookings", "behavior": "c"}, # ON DELETE CASCADE
         {"table": "access_prep_tasks", "ref": "rooms", "behavior": "n"}, # ON DELETE SET NULL
@@ -127,7 +143,7 @@ def run_tests():
         {"table": "access_prep_tasks", "ref": "admin_users", "behavior": "n"}, # ON DELETE SET NULL
         {"table": "access_prep_task_events", "ref": "access_prep_tasks", "behavior": "c"} # ON DELETE CASCADE
     ]
-    
+
     for ef in expected_fks:
         match = False
         for r in fk_rows:
@@ -140,7 +156,7 @@ def run_tests():
             print(f"[FAIL] FK from '{ef['table']}' to '{ef['ref']}' ON DELETE behavior is incorrect or missing.")
             failed = True
 
-    # 5. Check housekeeper_task_focus extension
+    # 5. Check housekeeper_task_focus Column and Constraint Verification
     print("\n--- 5. housekeeper_task_focus Column and Constraint Verification ---")
     sql_focus_cols = """
     SELECT column_name
@@ -153,7 +169,7 @@ def run_tests():
     else:
         print("[FAIL] Column 'focused_access_prep_task_id' is MISSING in housekeeper_task_focus.")
         failed = True
-        
+
     sql_focus_check = """
     SELECT con.conname AS constraint_name, pg_get_constraintdef(con.oid) AS constraint_definition
     FROM pg_constraint con
@@ -163,16 +179,32 @@ def run_tests():
     """
     focus_checks = run_db_query(sql_focus_check)
     type_check_ok = False
+    focus_check_ok = False
     for r in focus_checks:
         if "focus_type" in r["constraint_definition"] and "access_prep" in r["constraint_definition"]:
             type_check_ok = True
             print(f"[PASS] focus_type check constraint verified: {r['constraint_definition']}")
-            
+
+        if r["constraint_name"] == "housekeeper_task_focus_valid_focus_check":
+            definition = r["constraint_definition"]
+            if ("focused_access_prep_task_id" in definition and
+                "focused_cleaning_task_id" in definition and
+                "focused_field_assistance_task_id" in definition and
+                "access_prep" in definition):
+                focus_check_ok = True
+                print(f"[PASS] housekeeper_task_focus valid focus invariant verified: {definition}")
+            else:
+                print(f"[FAIL] housekeeper_task_focus constraint definition is incomplete: {definition}")
+                failed = True
+
     if not type_check_ok:
         print("[FAIL] housekeeper_task_focus focus_type check constraint does not contain 'access_prep'.")
         failed = True
+    if not focus_check_ok:
+        print("[FAIL] housekeeper_task_focus_valid_focus_check constraint is MISSING or incomplete.")
+        failed = True
 
-    # 6. Verify Unique active task by booking_id
+    # 6. Verify Unique active task by booking_id and source_event_id uniqueness
     print("\n--- 6. Unique Constraints & Indexes Verification ---")
     sql_indexes = """
     SELECT indexname, indexdef
@@ -187,9 +219,28 @@ def run_tests():
         ):
             active_booking_unique_ok = True
             print(f"[PASS] Unique active task index verified: {idx['indexdef']}")
-            
+
     if not active_booking_unique_ok:
         print("[FAIL] Unique active task index by booking_id (excluding terminal states) is MISSING.")
+        failed = True
+
+    sql_event_indexes = """
+    SELECT indexname, indexdef
+    FROM pg_indexes
+    WHERE schemaname = 'public' AND tablename = 'access_prep_task_events';
+    """
+    event_indexes = run_db_query(sql_event_indexes)
+    event_unique_ok = False
+    for idx in event_indexes:
+        if idx["indexname"] == "access_prep_task_events_source_event_unique":
+            if "WHERE" not in idx["indexdef"]:
+                event_unique_ok = True
+                print(f"[PASS] Unique source event index verified (no partial filter): {idx['indexdef']}")
+            else:
+                print(f"[FAIL] Unique source event index is partial (has WHERE clause): {idx['indexdef']}")
+                failed = True
+    if not event_unique_ok and not failed:
+        print("[FAIL] Unique source event index 'access_prep_task_events_source_event_unique' is MISSING.")
         failed = True
 
     # 7. Check RLS and Grants (no public/anon/authenticated permissions)
