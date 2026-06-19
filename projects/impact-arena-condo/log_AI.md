@@ -3809,3 +3809,43 @@ Phase 5 Slice 1 is now effectively complete.
 - Next task:
   Task 6 builds the Housekeeping queue/detail/problem Flex cards on top of
   this transport.
+
+## 2026-06-19 — Phase 6 Task 6 Housekeeping Queue Flex Cards
+
+- Added pure Housekeeping LINE Flex card rendering in
+  `housekeeping-handler/cards.ts`.
+- New card builders:
+  - `buildQueueFlexMessage` renders a bounded carousel of up to five tasks.
+  - `buildTaskDetailFlexMessage` renders focused task details.
+  - `buildProblemMenuFlexMessage` renders the locked problem categories:
+    water, soap, towels, damaged/lost, and other.
+- Queue cards preserve the Phase 6 field behavior contract:
+  - room and task type are first-viewport information
+  - Cleaning and Access Prep dependency status is visible but separate
+  - urgent/high/healthy/neutral status colors are represented
+  - visible text uses only a short guest name and does not expose phone,
+    reservation number, or database UUIDs
+  - each task card has one dominant state action
+  - task mutations and cursor navigation use signed postback payloads
+- Wired `show_today` and `show_queue` in the Housekeeping handler to call
+  `get_housekeeping_queue`, normalize the RPC page, and return raw LINE Flex
+  messages through `housekeeping_reply.messages`.
+  These navigation routes are read-only and do not call the state transition
+  service.
+- Existing text/Quick Reply fallback behavior remains for focused task details
+  and state transition replies until Task 7 delivers Flex through the n8n
+  workflow.
+- Verification:
+  - RED observed: `cards.test.ts` initially failed because `cards.ts` did not
+    exist; `index.test.ts` then failed because `/today` and `show_queue`
+    still fell through to transition handling.
+  - `deno test --allow-env runtime/supabase/supabase/functions/housekeeping-handler/cards.test.ts runtime/supabase/supabase/functions/housekeeping-handler/index.test.ts`:
+    `26 passed, 0 failed`
+  - `deno test --allow-env runtime/supabase/supabase/functions/housekeeping-handler/*.test.ts`:
+    `85 passed, 0 failed`
+  - `deno fmt --check` for all Task 6 changed files: passed
+  - `python3 scratch/phase6_housekeeping_baseline.test.py` ended with
+    `PHASE 6 HOUSEKEEPING BASELINE PASSED`
+- Next task:
+  Task 7 wires `housekeeping_reply.messages` through the n8n Housekeeping
+  workflow into the LINE gateway send body.
