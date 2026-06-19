@@ -4,7 +4,7 @@ This log tracks all codebase changes, architectural decisions, user agreements, 
 
 ## Current State & Phase
 - **Current Phase**: Phase 6 — Housekeeping LINE And Room Readiness Execution.
-- **Status**: Phase 6 Task 1 is complete. Schema added, tested, pushed to linked DB, and verified.
+- **Status**: Phase 6 Task 1 is accepted after Codex review. Access Prep schema, focus invariant, event idempotency, RLS/grants, advisors, and baseline regression are verified.
 
 ---
 
@@ -21,6 +21,25 @@ This log tracks all codebase changes, architectural decisions, user agreements, 
 ---
 
 ## Log Entries
+
+### 2026-06-19 14:10 +07 - Codex Review: Phase 6 Task 1 Accepted After Hardening
+
+- **Review scope**: Antigravity commits `3a2ed863734d757ea194e10017179c1a39e8dfff` and `9a1aab3d49cd83ab03cf0023da42fa1486d18375`.
+- **Initial review finding**:
+  - `housekeeper_task_focus_valid_focus_check` still used the old Phase 4 invariant and did not allow `focus_type = 'access_prep'`, so later Access Prep focus updates would fail despite the new column existing.
+  - `access_prep_task_events.source_event_id` was nullable with a partial unique index, while Task 1 required unique non-null event source IDs.
+  - `git diff HEAD^ HEAD --check` initially failed due trailing whitespace.
+- **Hardening accepted**:
+  - Added migration `20260619070456_phase6_access_prep_task_focus_and_event_hardening.sql`.
+  - Recreated `housekeeper_task_focus_valid_focus_check` so null, cleaning, field assistance, and access prep focus states are mutually exclusive and valid.
+  - Set `access_prep_task_events.source_event_id` to `NOT NULL` and made `access_prep_task_events_source_event_unique` non-partial.
+  - Expanded `scratch/phase6_access_prep_schema.test.py` to verify the focus invariant, non-null source event ID, and non-partial unique index.
+- **Codex verification commands**:
+  - `python3 scratch/phase6_access_prep_schema.test.py` -> `RESULT: PASS`.
+  - `git diff HEAD^ HEAD --check && git diff HEAD --check` -> passed.
+  - `python3 -m py_compile scratch/phase6_access_prep_schema.test.py scratch/phase6_housekeeping_baseline.test.py` -> passed.
+  - `SUPABASE_TELEMETRY_DISABLED=1 timeout 360 npx supabase db advisors --linked --level warn` -> only pre-existing Phase 4/5 warnings for `set_field_assistance_tasks_updated_at` and `phase5_slice4_guest_concierge_context`; no new Phase 6 Task 1 warnings.
+  - `python3 scratch/phase6_housekeeping_baseline.test.py` -> `PHASE 6 HOUSEKEEPING BASELINE PASSED`.
 
 ### 2026-06-19 13:58 +07 - Phase 6 Task 1: First-Class Access Prep Task Schema Added
 
