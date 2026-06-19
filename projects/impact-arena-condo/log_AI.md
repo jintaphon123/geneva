@@ -3767,3 +3767,45 @@ Phase 5 Slice 1 is now effectively complete.
 - Next task:
   Task 5 connects these intents to focused-task persistence and the queue
   handler routes.
+
+## 2026-06-19 — Phase 6 Task 5 Native LINE Flex Message Transport
+
+- Added bounded raw LINE message support to the gateway transport layer.
+- `buildLinePushPayload` and `buildLineReplyPayload` now accept exact raw
+  `messages` payloads for LINE message objects while preserving the existing
+  legacy `text`, `texts`, `images`, and `quickReply` path.
+- Raw message safety contract:
+  - 1 to 5 messages only
+  - allowed types are `text`, `image`, and `flex`
+  - Flex messages must include `altText`
+  - raw `messages` cannot be mixed with legacy text/image/quick-reply fields
+  - push requires `to`; reply requires `replyToken`
+- `/line/send-message` and `/line/send-text` now persist and send the same
+  final bounded payload through `outbound_messages.payload`.
+  Sender retry/fallback uses `payload.messages`, so the database payload and
+  LINE API body stay aligned.
+- Added `inferLineMessageType` so outbound rows derive `message_type` from the
+  final payload after validation or suppression fallback, including Flex.
+- Added ignored scratch contract test
+  `scratch/phase6_line_flex_send.test.ts`; it is force-added because the
+  project scratch folder is intentionally ignored.
+- Verification:
+  - `deno test --allow-read runtime/supabase/supabase/functions/line-webhook-gateway/line_send.test.ts scratch/phase6_line_flex_send.test.ts`:
+    `11 passed, 0 failed`
+  - `deno check runtime/supabase/supabase/functions/line-webhook-gateway/line_send.ts`:
+    passed
+  - `deno fmt --check` for all changed Task 5 files: passed
+  - `python3 scratch/phase6_housekeeping_baseline.test.py` ended with
+    `PHASE 6 HOUSEKEEPING BASELINE PASSED`
+- Known pre-existing verification limitation:
+  - `deno check runtime/supabase/supabase/functions/line-webhook-gateway/index.ts`
+    still reports strict TypeScript debt across the gateway and
+    `line_webhook.ts` (implicit `any` and inferred-object shape issues). The
+    newly changed `line_send.ts` passes `deno check`.
+  - `node scratch/phase4_internal_ops_case_action.test.mjs` still fails on
+    `message_draft_short_id_missing_after_insert`; the Phase 6 baseline does
+    not include that case-action harness and the failure appears unrelated to
+    this LINE Flex transport change.
+- Next task:
+  Task 6 builds the Housekeeping queue/detail/problem Flex cards on top of
+  this transport.
