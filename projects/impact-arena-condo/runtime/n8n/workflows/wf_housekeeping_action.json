@@ -1,0 +1,458 @@
+[
+  {
+    "id": "impact-housekeeping-action",
+    "name": "Impact - Housekeeping Action",
+    "active": true,
+    "nodes": [
+      {
+        "parameters": {
+          "httpMethod": "POST",
+          "path": "impact/housekeeping-action",
+          "options": {}
+        },
+        "id": "hk-action-webhook",
+        "name": "Receive housekeeping action trigger",
+        "type": "n8n-nodes-base.webhook",
+        "typeVersion": 2.1,
+        "position": [
+          -600,
+          0
+        ],
+        "webhookId": "impact-housekeeping-action"
+      },
+      {
+        "parameters": {
+          "jsCode": "const incoming = items[0].json;\nconst headers = incoming.headers ?? {};\nconst body = incoming.body ?? incoming;\nconst expectedSecret = $env.N8N_WEBHOOK_SECRET;\nconst receivedSecret = headers['x-impact-webhook-secret'] ?? headers['X-Impact-Webhook-Secret'];\nif (!expectedSecret) {\n  throw new Error('missing_webhook_secret');\n}\nif (receivedSecret !== expectedSecret) {\n  throw new Error('invalid_webhook_secret');\n}\n\nconst lineChannel = body.line_channel ?? '';\nif (lineChannel !== 'housekeeping_line') {\n  return [];\n}\n\nconst lineUserId = body.actor?.line_user_id ?? body.line_user_id ?? null;\nconst text = String(body.message_text ?? body.text ?? '').trim();\nif (!lineUserId || !text) {\n  return [];\n}\n\nreturn [{\n  json: {\n    line_channel: 'housekeeping_line',\n    event_type: body.event_type ?? 'message',\n    message_id: body.message_id ?? null,\n    message_type: body.message_type ?? 'text',\n    line_user_id: lineUserId,\n    text: text,\n    display_name: body.actor?.display_name ?? body.display_name ?? null,\n    conversation_id: body.conversation_id ?? null,\n    correlation_id: body.correlation_id ?? null,\n    source_event_id: body.source_event_id ?? null,\n    reply_token_ephemeral: body.reply_token_ephemeral ?? null,\n  },\n}];\n"
+        },
+        "id": "hk-action-validate",
+        "name": "Validate housekeeping request",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          -400,
+          0
+        ]
+      },
+      {
+        "parameters": {
+          "method": "POST",
+          "url": "={{ $env.SUPABASE_URL + '/functions/v1/housekeeping-handler' }}",
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "name": "x-impact-webhook-secret",
+                "value": "={{ $env.N8N_WEBHOOK_SECRET }}"
+              }
+            ]
+          },
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={{ $json }}",
+          "options": {
+            "response": {
+              "response": {
+                "fullResponse": true,
+                "neverError": true
+              }
+            }
+          }
+        },
+        "id": "hk-action-handler",
+        "name": "Call housekeeping handler",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          -200,
+          0
+        ]
+      },
+      {
+        "parameters": {
+          "jsCode": "const response = items[0].json;\nconst statusCode = response.statusCode ?? 200;\nconst body = response.body ?? response;\n\nif (statusCode >= 400 || !body || body.ok === false) {\n  const text = body.message ?? body.error ?? 'unknown_error';\n  return [{\n    json: {\n      ok: false,\n      error: body.error ?? 'handler_error',\n      message: text,\n      internal_notification: {\n        text: `แจ้งเตือนข้อผิดพลาด: housekeeping-handler คืนสถานะ HTTP ${statusCode}\\nรายละเอียด: ${text}`\n      }\n    }\n  }];\n}\n\nif (body.incident_candidate) {\n  return this.helpers.httpRequest({\n    method: 'POST',\n    url: $env.SUPABASE_URL + '/rest/v1/rpc/report_operational_incident',\n    headers: {\n      apikey: $env.SUPABASE_SERVICE_ROLE_KEY,\n      Authorization: 'Bearer ' + $env.SUPABASE_SERVICE_ROLE_KEY,\n      'Content-Type': 'application/json'\n    },\n    body: { p_incident: body.incident_candidate },\n    json: true\n  }).then(() => {\n    return [{\n      json: {\n        ok: true,\n        action: body.action ?? null,\n        housekeeping_reply: body.housekeeping_reply ?? null,\n        internal_notification: body.internal_notification ?? null,\n        guest_draft_request: body.guest_draft_request ?? null,\n        incident_candidate: body.incident_candidate ?? null,\n        incident_reported: true,\n        evidence: body.evidence ?? null\n      }\n    }];\n  }).catch((err) => {\n    const errMsg = err.message || String(err);\n    return [{\n      json: {\n        ok: false,\n        error: 'incident_rpc_failed',\n        message: `Failed to report operational incident: ${errMsg}`,\n        internal_notification: {\n          text: `แจ้งเตือนข้อผิดพลาด: การเรียก report_operational_incident ล้มเหลว\\nรายละเอียด: ${errMsg}`\n        }\n      }\n    }];\n  });\n}\n\nreturn [{\n  json: {\n    ok: true,\n    action: body.action ?? null,\n    housekeeping_reply: body.housekeeping_reply ?? null,\n    internal_notification: body.internal_notification ?? null,\n    guest_draft_request: body.guest_draft_request ?? null,\n    incident_candidate: null,\n    incident_reported: false,\n    evidence: body.evidence ?? null\n  }\n}];\n"
+        },
+        "id": "hk-action-process",
+        "name": "Process handler response",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          0,
+          0
+        ]
+      },
+      {
+        "parameters": {
+          "conditions": {
+            "options": {
+              "caseSensitive": true,
+              "leftValue": "",
+              "typeValidation": "loose"
+            },
+            "conditions": [
+              {
+                "id": "has-reply",
+                "leftValue": "={{ (() => { const reply = $json.housekeeping_reply ?? {}; return (Array.isArray(reply.messages) && reply.messages.length > 0) || (typeof reply.text === \"string\" && reply.text.trim() !== \"\"); })() }}",
+                "rightValue": true,
+                "operator": {
+                  "type": "boolean",
+                  "operation": "true",
+                  "singleValue": true
+                }
+              }
+            ],
+            "combinator": "and"
+          },
+          "options": {
+            "response": {
+              "response": {
+                "fullResponse": true,
+                "neverError": true
+              }
+            }
+          }
+        },
+        "id": "hk-action-if-reply",
+        "name": "IF has housekeeping reply",
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 2,
+        "position": [
+          200,
+          -100
+        ]
+      },
+      {
+        "parameters": {
+          "method": "POST",
+          "url": "={{ $env.IMPACT_LINE_SEND_TEXT_URL || ($env.SUPABASE_URL + '/functions/v1/line-webhook-gateway/line/send-text') }}",
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "name": "x-impact-webhook-secret",
+                "value": "={{ $env.N8N_WEBHOOK_SECRET }}"
+              }
+            ]
+          },
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={{ (() => {\n  const reply = $('Process handler response').first().json.housekeeping_reply ?? {};\n  return {\n    channel: \"housekeeping_line\",\n    to: $('Validate housekeeping request').first().json.line_user_id,\n    messages: reply.messages ?? undefined,\n    text: reply.text ?? undefined,\n    quickReply: reply.quickReply ?? undefined,\n    conversation_id: $('Validate housekeeping request').first().json.conversation_id,\n    source_event_id: $('Validate housekeeping request').first().json.source_event_id,\n    correlation_id: $('Validate housekeeping request').first().json.correlation_id,\n    reply_token_ephemeral: $('Validate housekeeping request').first().json.reply_token_ephemeral\n  };\n})() }}",
+          "options": {
+            "response": {
+              "response": {
+                "fullResponse": true,
+                "neverError": true
+              }
+            }
+          }
+        },
+        "id": "hk-action-send-reply",
+        "name": "Send housekeeping LINE reply",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          400,
+          -200
+        ]
+      },
+      {
+        "parameters": {
+          "conditions": {
+            "options": {
+              "caseSensitive": true,
+              "leftValue": "",
+              "typeValidation": "loose"
+            },
+            "conditions": [
+              {
+                "id": "has-notify",
+                "leftValue": "={{ $('Process handler response').first().json.internal_notification !== null && $('Process handler response').first().json.internal_notification !== undefined && $('Process handler response').first().json.internal_notification.text !== null && $('Process handler response').first().json.internal_notification.text !== undefined }}",
+                "rightValue": true,
+                "operator": {
+                  "type": "boolean",
+                  "operation": "true",
+                  "singleValue": true
+                }
+              }
+            ],
+            "combinator": "and"
+          },
+          "options": {}
+        },
+        "id": "hk-action-if-notify",
+        "name": "IF has internal notification",
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 2,
+        "position": [
+          600,
+          100
+        ]
+      },
+      {
+        "parameters": {
+          "method": "POST",
+          "url": "={{ $env.IMPACT_LINE_SEND_TEXT_URL || ($env.SUPABASE_URL + '/functions/v1/line-webhook-gateway/line/send-text') }}",
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "name": "x-impact-webhook-secret",
+                "value": "={{ $env.N8N_WEBHOOK_SECRET }}"
+              }
+            ]
+          },
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={{ ({ channel: \"internal_ops_oa\", to: $env.LINE_INTERNAL_OPS_DEFAULT_TARGET_ID || ($env.LINE_INTERNAL_OPS_ALLOWED_USER_IDS || '').split(',')[0].trim(), text: $('Process handler response').first().json.internal_notification.text, conversation_id: $('Validate housekeeping request').first().json.conversation_id, source_event_id: $('Validate housekeeping request').first().json.source_event_id, correlation_id: $('Validate housekeeping request').first().json.correlation_id }) }}",
+          "options": {
+            "response": {
+              "response": {
+                "fullResponse": true,
+                "neverError": true
+              }
+            }
+          }
+        },
+        "id": "hk-action-send-notify",
+        "name": "Send internal ops notification",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          800,
+          0
+        ]
+      },
+      {
+        "parameters": {
+          "conditions": {
+            "options": {
+              "caseSensitive": true,
+              "leftValue": "",
+              "typeValidation": "loose"
+            },
+            "conditions": [
+              {
+                "id": "has-draft",
+                "leftValue": "={{ $('Process handler response').first().json.guest_draft_request !== null && $('Process handler response').first().json.guest_draft_request !== undefined }}",
+                "rightValue": true,
+                "operator": {
+                  "type": "boolean",
+                  "operation": "true",
+                  "singleValue": true
+                }
+              }
+            ],
+            "combinator": "and"
+          },
+          "options": {}
+        },
+        "id": "hk-action-if-draft",
+        "name": "IF has guest draft request",
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 2,
+        "position": [
+          1000,
+          300
+        ]
+      },
+      {
+        "parameters": {
+          "method": "POST",
+          "url": "={{ $env.N8N_INTERNAL_OPS_DRAFT_ACTION_URL }}",
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "name": "x-impact-webhook-secret",
+                "value": "={{ $env.N8N_WEBHOOK_SECRET }}"
+              }
+            ]
+          },
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={{ { mode: \"create_draft_request\", source_event_id: $('Validate housekeeping request').first().json.source_event_id, correlation_id: $('Validate housekeeping request').first().json.correlation_id, draft_request: $json.guest_draft_request } }}",
+          "options": {
+            "response": {
+              "response": {
+                "fullResponse": true,
+                "neverError": true
+              }
+            }
+          }
+        },
+        "id": "hk-action-create-draft",
+        "name": "Create guest draft request",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          1200,
+          200
+        ]
+      },
+      {
+        "parameters": {
+          "jsCode": "const processNode = $('Process handler response').first().json;\n\nfunction hasHousekeepingReply(reply) {\n  return (Array.isArray(reply?.messages) && reply.messages.length > 0) ||\n    (typeof reply?.text === 'string' && reply.text.trim() !== '');\n}\n\nconst replyRequested = hasHousekeepingReply(processNode.housekeeping_reply);\nconst notifyRequested = !!processNode.internal_notification;\nconst draftRequested = !!processNode.guest_draft_request;\n\nconst replyResult = replyRequested ? ($('Send housekeeping LINE reply').first()?.json || null) : null;\nconst notifyResult = notifyRequested ? ($('Send internal ops notification').first()?.json || null) : null;\nconst draftResult = draftRequested ? ($('Create guest draft request').first()?.json || null) : null;\n\nfunction unwrap(result) {\n  return result?.body ?? result ?? null;\n}\n\nfunction httpSucceeded(result) {\n  if (!result) return false;\n  const statusCode = Number(result.statusCode ?? result.status ?? 200);\n  return statusCode >= 200 && statusCode < 300;\n}\n\nfunction lineDeliverySucceeded(result) {\n  const body = unwrap(result);\n  return httpSucceeded(result) && body?.ok === true && !!body?.outbound_message_id;\n}\n\nfunction draftCreationSucceeded(result) {\n  const body = unwrap(result);\n  return httpSucceeded(result) &&\n    body?.ok === true &&\n    ['draft_created', 'draft_exists'].includes(body?.action) &&\n    !!body?.draft_id;\n}\n\nconst replySent = replyRequested ? lineDeliverySucceeded(replyResult) : false;\nconst notifySent = notifyRequested ? lineDeliverySucceeded(notifyResult) : false;\nconst draftCreated = draftRequested ? draftCreationSucceeded(draftResult) : false;\nconst allRequestedEffectsSucceeded =\n  (!replyRequested || replySent) &&\n  (!notifyRequested || notifySent) &&\n  (!draftRequested || draftCreated);\n\nreturn [{\n  json: {\n    ok: processNode.ok === true && allRequestedEffectsSucceeded,\n    action: processNode.action,\n    housekeeping_reply_sent: replySent,\n    internal_notification_sent: notifySent,\n    guest_draft_created: draftCreated,\n    evidence: processNode.evidence,\n    details: {\n      reply_result: replyResult,\n      notify_result: notifyResult,\n      draft_result: draftResult\n    }\n  }\n}];\n"
+        },
+        "id": "hk-action-evidence",
+        "name": "Build execution evidence",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          1400,
+          100
+        ]
+      }
+    ],
+    "connections": {
+      "Receive housekeeping action trigger": {
+        "main": [
+          [
+            {
+              "node": "Validate housekeeping request",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Validate housekeeping request": {
+        "main": [
+          [
+            {
+              "node": "Call housekeeping handler",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Call housekeeping handler": {
+        "main": [
+          [
+            {
+              "node": "Process handler response",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Process handler response": {
+        "main": [
+          [
+            {
+              "node": "IF has housekeeping reply",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "IF has housekeeping reply": {
+        "main": [
+          [
+            {
+              "node": "Send housekeeping LINE reply",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "IF has internal notification",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Send housekeeping LINE reply": {
+        "main": [
+          [
+            {
+              "node": "IF has internal notification",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "IF has internal notification": {
+        "main": [
+          [
+            {
+              "node": "Send internal ops notification",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "IF has guest draft request",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Send internal ops notification": {
+        "main": [
+          [
+            {
+              "node": "IF has guest draft request",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "IF has guest draft request": {
+        "main": [
+          [
+            {
+              "node": "Create guest draft request",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "Build execution evidence",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Create guest draft request": {
+        "main": [
+          [
+            {
+              "node": "Build execution evidence",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      }
+    },
+    "settings": {
+      "executionOrder": "v1"
+    }
+  }
+]
