@@ -4,7 +4,7 @@ This log tracks all codebase changes, architectural decisions, user agreements, 
 
 ## Current State & Phase
 - **Current Phase**: Phase 6 — Housekeeping LINE And Room Readiness Execution.
-- **Status**: Phase 6 Task 0 is complete. Baseline verifier created and run sequentially, all existing tests passed.
+- **Status**: Phase 6 Task 1 is complete. Schema added, tested, pushed to linked DB, and verified.
 
 ---
 
@@ -21,6 +21,27 @@ This log tracks all codebase changes, architectural decisions, user agreements, 
 ---
 
 ## Log Entries
+
+### 2026-06-19 13:58 +07 - Phase 6 Task 1: First-Class Access Prep Task Schema Added
+
+- **Context**: Phase 6 Task 1 - Add First-Class Access Prep Task Schema to decouple cleaning tasks from booking-scoped access preparation.
+- **Action taken**:
+  - Generated database migration `20260619065346_phase6_access_prep_task_core.sql` via Supabase CLI.
+  - Created schema verification test `scratch/phase6_access_prep_schema.test.py` to assert the required tables, columns, check constraints, foreign keys/delete behaviors, index constraints, RLS, and security grants.
+  - Executed the schema test initially to verify the expected RED failure.
+  - Implemented the schema in the migration file: created tables `access_prep_tasks` and `access_prep_task_events`, added column `focused_access_prep_task_id` and updated type checks in `housekeeper_task_focus`, enabled RLS, revoked public privileges, granted permissions to `service_role` and `postgres`, and created appropriate indexes.
+  - Pushed migrations to the linked Supabase database via `npx supabase db push --linked`.
+  - Executed the schema test again to verify the expected GREEN pass.
+- **Schema test results**:
+  - `access_prep_tasks` and `access_prep_task_events` exist and RLS is enabled.
+  - All 26 columns in `access_prep_tasks` verified with correct types/nullability.
+  - CHECK constraints (priority check, status check, key custody check) exist and are correct.
+  - Foreign Keys with CASCADE/SET NULL delete behaviors verified.
+  - Column and constraint modifications on `housekeeper_task_focus` verified.
+  - Unique index `access_prep_tasks_active_booking_unique` exists.
+  - Security grants verified: no public/anon/authenticated roles have access.
+  - Overall status: `RESULT: PASS`
+
 
 ### 2026-06-19 13:40 +07 - Phase 6 Task 0: Baseline Housekeeping Verification Passed
 
